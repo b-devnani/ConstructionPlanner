@@ -100,7 +100,12 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
   const [twoClickState, setTwoClickState] = useState<{
     activityId: number | null;
     firstClickDate: string | null;
-  }>({ activityId: null, firstClickDate: null });
+    endDateSet: boolean;
+  }>({ 
+    activityId: null, 
+    firstClickDate: null,
+    endDateSet: false
+  });
 
   // Handle date cell click to update start/end dates with two-click approach
   const handleDateCellClick = (activity: Activity, date: string) => {
@@ -122,7 +127,8 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
       // Remember activity and click date (store the shifted date)
       setTwoClickState({
         activityId: activity.id,
-        firstClickDate: shiftedDate
+        firstClickDate: shiftedDate,
+        endDateSet: false
       });
       
       console.log(`First click - set start date to: ${shiftedDate}`);
@@ -148,8 +154,21 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
         console.log(`Second click before first - swapped dates`);
       }
       
-      // Reset the two-click state
-      setTwoClickState({ activityId: null, firstClickDate: null });
+      // Reset the two-click state and set endDateSet to true
+      setTwoClickState({ 
+        activityId: null, 
+        firstClickDate: null,
+        endDateSet: true
+      });
+      
+      // We'll let the endDateSet state naturally transition back to false
+      // on the next render cycle when we reset the state
+      setTimeout(() => {
+        setTwoClickState(prev => ({
+          ...prev,
+          endDateSet: false
+        }));
+      }, 200);
     }
   };
   
@@ -164,29 +183,37 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
     }
   };
   
-  // Sort activities based on sortBy
-  const sortedActivities = [...activities].sort((a, b) => {
-    switch (sortBy) {
-      case 'start_date':
-        return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
-      case 'end_date':
-        return new Date(a.end_date).getTime() - new Date(b.end_date).getTime();
-      case 'location':
-        return a.location.localeCompare(b.location);
-      case 'contractor':
-        return a.contractor.localeCompare(b.contractor);
-      default:
-        return 0;
-    }
-  });
+  // Only sort activities if we're not in the middle of two-click selection
+  // or if we have finished two-click selection (endDateSet is true)
+  let activitiesToUse = [...activities];
+  
+  // Only sort if either:
+  // 1. We're not in the middle of a two-click selection (twoClickState.activityId is null)
+  // 2. We have just completed a two-click selection (endDateSet is true)
+  if (twoClickState.activityId === null || twoClickState.endDateSet) {
+    activitiesToUse.sort((a, b) => {
+      switch (sortBy) {
+        case 'start_date':
+          return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+        case 'end_date':
+          return new Date(a.end_date).getTime() - new Date(b.end_date).getTime();
+        case 'location':
+          return a.location.localeCompare(b.location);
+        case 'contractor':
+          return a.contractor.localeCompare(b.contractor);
+        default:
+          return 0;
+      }
+    });
+  }
   
   // Group activities based on groupBy
   const groupedActivities: { [key: string]: Activity[] } = {};
   
   if (groupBy === 'none') {
-    groupedActivities['All Activities'] = sortedActivities;
+    groupedActivities['All Activities'] = activitiesToUse;
   } else {
-    sortedActivities.forEach(activity => {
+    activitiesToUse.forEach(activity => {
       const groupKey = activity[groupBy as keyof Activity] as string;
       if (!groupedActivities[groupKey]) {
         groupedActivities[groupKey] = [];
@@ -503,8 +530,26 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
               // Add all the activity rows
               groupActivities.forEach(activity => {
                 rows.push(
-                  <tr key={`activity-${activity.id}`} className={`hover:${theme === 'dark' ? 'bg-gray-800/50' : 'bg-slate-50'}`}>
-                    <td className={`px-4 py-2 text-sm sticky left-0 z-10 ${theme === 'dark' ? 'bg-gray-850' : 'bg-white'} border-r ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'}`}>
+                  <tr 
+                    key={`activity-${activity.id}`} 
+                    className={`hover:${theme === 'dark' ? 'bg-gray-800/50' : 'bg-slate-50'} ${
+                      // If another row is in first-click mode, this row should be greyed out
+                      twoClickState.activityId !== null && twoClickState.activityId !== activity.id && !twoClickState.endDateSet
+                        ? 'opacity-30'
+                        : ''
+                    } ${
+                      // Highlight the row if it's selected in two-click mode
+                      twoClickState.activityId === activity.id && !twoClickState.endDateSet
+                        ? theme === 'dark' ? 'bg-blue-900/20 !opacity-100' : 'bg-blue-50 !opacity-100'
+                        : ''
+                    } transition-opacity duration-300`}
+                  >
+                    <td className={`px-4 py-2 text-sm sticky left-0 z-10 ${
+                      // Match the row highlight for the sticky column
+                      twoClickState.activityId === activity.id && !twoClickState.endDateSet 
+                        ? theme === 'dark' ? 'bg-blue-900/20' : 'bg-blue-50'
+                        : theme === 'dark' ? 'bg-gray-850' : 'bg-white'
+                    } border-r ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'}`}>
                       {renderEditableCell(activity, 'name')}
                     </td>
                     
