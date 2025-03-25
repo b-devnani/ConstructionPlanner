@@ -185,43 +185,67 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
     }
   };
   
-  // Only sort when refreshCounter, sortBy, or groupBy changes - NOT when activities change
-  let activitiesToUse = [...activities];
+  // Store sorted activities separately from the input activities
+  const [sortedActivities, setSortedActivities] = useState<Activity[]>([]);
   
-  // Track the last refresh counter to detect changes
-  const [lastRefreshCounter, setLastRefreshCounter] = useState(refreshCounter || 0);
-  const [lastSortBy, setLastSortBy] = useState(sortBy);
-  const [lastGroupBy, setLastGroupBy] = useState(groupBy);
+  // Track whether we need to sort on the next render
+  const [triggerSort, setTriggerSort] = useState(false);
   
-  // Check if any of the sort triggers have changed
-  const shouldSort = 
-    refreshCounter !== lastRefreshCounter || 
-    sortBy !== lastSortBy || 
-    groupBy !== lastGroupBy;
+  // Keep track of the previous sort trigger values to detect changes
+  const prevRefreshCounter = useRef(refreshCounter || 0);
+  const prevSortBy = useRef(sortBy);
+  const prevGroupBy = useRef(groupBy);
   
-  // If a sort trigger changed, run the sort
-  if (shouldSort) {
-    console.log("Sorting activities due to refresh/sort/group change");
-    activitiesToUse.sort((a, b) => {
-      switch (sortBy) {
-        case 'start_date':
-          return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
-        case 'end_date':
-          return new Date(a.end_date).getTime() - new Date(b.end_date).getTime();
-        case 'location':
-          return a.location.localeCompare(b.location);
-        case 'contractor':
-          return a.contractor.localeCompare(b.contractor);
-        default:
-          return 0;
-      }
-    });
+  // Check for changes in sort triggers that would require re-sorting
+  useEffect(() => {
+    // Only set trigger for valid sort changes - refresh button, sortBy or groupBy
+    if (refreshCounter !== prevRefreshCounter.current || 
+        sortBy !== prevSortBy.current || 
+        groupBy !== prevGroupBy.current) {
+      console.log("Sort trigger detected - will sort on next render");
+      setTriggerSort(true);
+      
+      // Update previous values
+      prevRefreshCounter.current = refreshCounter || 0;
+      prevSortBy.current = sortBy;
+      prevGroupBy.current = groupBy;
+    }
+  }, [refreshCounter, sortBy, groupBy]);
+  
+  // Handle actual sorting when activities change OR when triggerSort is true
+  useEffect(() => {
+    // Always use the current activities as the base
+    const newActivities = [...activities];
     
-    // Update the last values to avoid resorting until they change again
-    setLastRefreshCounter(refreshCounter || 0);
-    setLastSortBy(sortBy);
-    setLastGroupBy(groupBy);
-  }
+    // Only perform sort if the sort trigger changed
+    if (triggerSort) {
+      console.log("Performing sort based on", sortBy);
+      
+      newActivities.sort((a, b) => {
+        switch (sortBy) {
+          case 'start_date':
+            return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+          case 'end_date':
+            return new Date(a.end_date).getTime() - new Date(b.end_date).getTime();
+          case 'location':
+            return a.location.localeCompare(b.location);
+          case 'contractor':
+            return a.contractor.localeCompare(b.contractor);
+          default:
+            return 0;
+        }
+      });
+      
+      // Reset the sort trigger
+      setTriggerSort(false);
+    }
+    
+    // Update the sorted activities regardless
+    setSortedActivities(newActivities);
+  }, [activities, triggerSort, sortBy]);
+  
+  // Use sortedActivities for display instead of raw activities
+  const activitiesToUse = sortedActivities.length > 0 ? sortedActivities : activities;
   
   // Group activities based on groupBy
   const groupedActivities: { [key: string]: Activity[] } = {};
