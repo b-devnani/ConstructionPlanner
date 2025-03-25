@@ -86,16 +86,22 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
     const startDate = new Date(activity.start_date);
     const endDate = new Date(activity.end_date);
     const clickedDate = new Date(date);
+    
+    // Reset time components for accurate date comparison
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(0, 0, 0, 0);
+    clickedDate.setHours(0, 0, 0, 0);
 
-    // If clicked after end date, extend end date
-    if (clickedDate > endDate) {
+    // If clicked after end date, extend end date to include the clicked date
+    if (clickedDate.getTime() > endDate.getTime()) {
       onEditActivity(activity.id, 'end_date', date);
     } 
-    // If clicked before start date, move start date
-    else if (clickedDate < startDate) {
+    // If clicked before start date, move start date to clicked date
+    else if (clickedDate.getTime() < startDate.getTime()) {
       onEditActivity(activity.id, 'start_date', date);
     }
-    // If clicked within range, do nothing or could implement other behavior
+    // If clicked on a day within the range, do nothing for now
+    // Could implement other behavior like splitting the activity
   };
   
   // Handle keyboard events during editing

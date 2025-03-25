@@ -79,9 +79,19 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
     today.setHours(0, 0, 0, 0);
     
     // Find the first day of the current week based on firstDayOfWeek setting
+    // For Monday as first day (firstDayOffset=1): Sunday=6, Monday=0, Tuesday=1, etc.
+    // For Sunday as first day (firstDayOffset=0): Sunday=0, Monday=1, Tuesday=2, etc.
     const firstDayOffset = settings.firstDayOfWeek === 'monday' ? 1 : 0;
-    const dayOfWeek = currentDate.getDay();
-    const diff = currentDate.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : firstDayOffset);
+    let dayOfWeek = currentDate.getDay(); // 0=Sunday, 1=Monday, etc.
+    
+    // Adjust day of week based on first day setting
+    if (settings.firstDayOfWeek === 'monday') {
+      // Convert to Monday=0, Tuesday=1, ..., Sunday=6
+      dayOfWeek = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    }
+    
+    // Calculate difference to first day of week
+    const diff = currentDate.getDate() - dayOfWeek;
     const firstDayOfWeek = new Date(currentDate);
     firstDayOfWeek.setDate(diff);
     
