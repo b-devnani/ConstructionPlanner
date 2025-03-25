@@ -34,6 +34,23 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
   const [groupBy, setGroupBy] = useState<string>('none');
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [showNewRow, setShowNewRow] = useState(false);
+  
+  // Default values for new activity
+  const getDefaultActivity = (): Omit<Activity, 'id'> => {
+    const today = new Date().toISOString().split('T')[0];
+    return {
+      name: '',
+      location: locations.length > 0 ? locations[0].name : '',
+      contractor: contractors.length > 0 ? contractors[0].name : '',
+      start_date: today,
+      end_date: today,
+      duration: 1
+    };
+  };
+  
+  // New activity data for inline creation
+  const [newActivity, setNewActivity] = useState<Omit<Activity, 'id'>>(getDefaultActivity());
   
   // Generate three week view based on current date
   useEffect(() => {
@@ -83,6 +100,11 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
     setThreeWeekView({ weeks });
   }, [currentDate, settings.firstDayOfWeek, isWorkingDay]);
   
+  // Reset new activity fields when locations or contractors change
+  useEffect(() => {
+    setNewActivity(getDefaultActivity());
+  }, [locations, contractors]);
+  
   const handlePrevious = () => {
     const newDate = new Date(currentDate);
     newDate.setDate(newDate.getDate() - 7);
@@ -100,6 +122,16 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
   };
   
   const handleAddActivityClick = () => {
+    // Toggle spreadsheet-like "Add Row" feature
+    setShowNewRow(prev => !prev);
+    
+    // Reset new activity form
+    if (!showNewRow) {
+      setNewActivity(getDefaultActivity());
+    }
+  };
+  
+  const handleAddActivityModal = () => {
     setSelectedActivity(null);
     setIsActivityModalOpen(true);
   };
@@ -111,6 +143,37 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
   
   const handleActivityModalClose = () => {
     setIsActivityModalOpen(false);
+  };
+  
+  const handleNewActivityChange = (field: keyof Omit<Activity, 'id'>, value: string | number) => {
+    setNewActivity(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      // Update duration if start or end date changes
+      if (field === 'start_date' || field === 'end_date') {
+        const workingDays = settings.calculateWorkingDays(
+          field === 'start_date' ? String(value) : prev.start_date,
+          field === 'end_date' ? String(value) : prev.end_date
+        );
+        updated.duration = workingDays;
+      }
+      
+      return updated;
+    });
+  };
+  
+  const handleCreateActivity = () => {
+    // Validate the new activity
+    if (!newActivity.name || !newActivity.location || !newActivity.contractor || 
+        !newActivity.start_date || !newActivity.end_date) {
+      return; // Don't submit invalid data
+    }
+    
+    onAddActivity(newActivity);
+    
+    // Reset the form and hide the row
+    setNewActivity(getDefaultActivity());
+    setShowNewRow(false);
   };
   
   return (
@@ -199,16 +262,117 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
               {/* Add Activity Button */}
               <button
                 onClick={handleAddActivityClick}
-                className="ml-auto px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-md text-sm flex items-center"
+                className={`ml-auto px-3 py-1.5 ${showNewRow ? 'bg-amber-500 hover:bg-amber-600' : 'bg-green-500 hover:bg-green-600'} text-white rounded-md text-sm flex items-center`}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  {showNewRow ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  )}
                 </svg>
-                Add Activity
+                {showNewRow ? 'Cancel' : 'Add Activity'}
+              </button>
+              
+              {/* Alternative way to add activity through modal */}
+              <button
+                onClick={handleAddActivityModal}
+                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm flex items-center"
+                title="Add activity using form modal"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
               </button>
             </div>
           </div>
         </div>
+
+        {/* New Activity Row (Spreadsheet-like) */}
+        {showNewRow && (
+          <div className={`mb-4 ${theme === 'dark' ? 'bg-gray-850' : 'bg-white'} rounded-lg shadow p-4`}>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+              <div>
+                <label className="block text-sm font-medium mb-1">Activity Name</label>
+                <input
+                  type="text"
+                  value={newActivity.name}
+                  onChange={(e) => handleNewActivityChange('name', e.target.value)}
+                  className={`w-full py-2 px-3 rounded-md ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-slate-800'} border`}
+                  placeholder="Enter activity name"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Location</label>
+                <select
+                  value={newActivity.location}
+                  onChange={(e) => handleNewActivityChange('location', e.target.value)}
+                  className={`w-full py-2 px-3 rounded-md ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-slate-800'} border`}
+                >
+                  <option value="">Select Location</option>
+                  {locations.map(location => (
+                    <option key={location.id} value={location.name}>
+                      {location.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium mb-1">Contractor</label>
+                <select
+                  value={newActivity.contractor}
+                  onChange={(e) => handleNewActivityChange('contractor', e.target.value)}
+                  className={`w-full py-2 px-3 rounded-md ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-slate-800'} border`}
+                >
+                  <option value="">Select Contractor</option>
+                  {contractors.map(contractor => (
+                    <option key={contractor.id} value={contractor.name}>
+                      {contractor.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={newActivity.start_date}
+                    onChange={(e) => handleNewActivityChange('start_date', e.target.value)}
+                    className={`w-full py-2 px-3 rounded-md ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-slate-800'} border`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={newActivity.end_date}
+                    onChange={(e) => handleNewActivityChange('end_date', e.target.value)}
+                    className={`w-full py-2 px-3 rounded-md ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-slate-800'} border`}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex space-x-2">
+                <button
+                  onClick={handleCreateActivity}
+                  className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md"
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => setShowNewRow(false)}
+                  className={`px-4 py-2 ${theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-slate-200 hover:bg-slate-300'} rounded-md`}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Schedule Table */}
         <ScheduleTable
