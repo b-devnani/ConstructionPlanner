@@ -56,6 +56,8 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [showNewRow, setShowNewRow] = useState(false);
+  // Add a refresh counter to trigger re-sorts
+  const [refreshCounter, setRefreshCounter] = useState(0);
   
   // Default values for new activity
   const getDefaultActivity = (): Omit<Activity, 'id'> => {
@@ -276,7 +278,11 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
                 <select
                   id="sortBy"
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
+                  onChange={(e) => {
+                    setSortBy(e.target.value);
+                    // When sort type changes, trigger a refresh
+                    setRefreshCounter(prev => prev + 1);
+                  }}
                   className={`form-select rounded-md ${theme === 'dark' ? 'border-slate-600 bg-gray-800' : 'border-slate-300 bg-white'} text-sm py-1.5 pl-2 pr-8`}
                 >
                   <option value="start_date">Start Date</option>
@@ -292,7 +298,11 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
                 <select
                   id="groupBy"
                   value={groupBy}
-                  onChange={(e) => setGroupBy(e.target.value)}
+                  onChange={(e) => {
+                    setGroupBy(e.target.value);
+                    // When group type changes, trigger a refresh
+                    setRefreshCounter(prev => prev + 1);
+                  }}
                   className={`form-select rounded-md ${theme === 'dark' ? 'border-slate-600 bg-gray-800' : 'border-slate-300 bg-white'} text-sm py-1.5 pl-2 pr-8`}
                 >
                   <option value="none">No Grouping</option>
@@ -301,7 +311,17 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
                 </select>
               </div>
 
-
+              {/* Refresh Button */}
+              <button
+                onClick={() => setRefreshCounter(prev => prev + 1)}
+                className={`px-3 py-1.5 ${theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-slate-200 hover:bg-slate-300'} rounded-md transition-colors duration-150 flex items-center text-sm`}
+                title="Refresh sorting and grouping"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
             </div>
           </div>
         </div>
@@ -319,6 +339,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
           groupBy={groupBy}
           locations={locations}
           contractors={contractors}
+          refreshCounter={refreshCounter}
         />
 
         {/* Activity Form Modal */}
