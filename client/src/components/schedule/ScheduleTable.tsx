@@ -81,36 +81,54 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
     setEditingCell({ activityId: null, field: null });
   };
   
-  // Handle date cell click to update start/end dates
-  const handleDateCellClick = (activity: Activity, date: string) => {
-    const startDate = new Date(activity.start_date);
-    const endDate = new Date(activity.end_date);
-    
-    // Create a new clicked date with 1-day shift to fix the off-by-one issue
-    const clickedDate = new Date(date);
-    clickedDate.setDate(clickedDate.getDate() + 1);
-    
-    // Reset time components for accurate date comparison
-    startDate.setHours(0, 0, 0, 0);
-    endDate.setHours(0, 0, 0, 0);
-    clickedDate.setHours(0, 0, 0, 0);
+  // Track which activity is being set with two clicks
+  const [twoClickState, setTwoClickState] = useState<{
+    activityId: number | null;
+    firstClickDate: string | null;
+  }>({ activityId: null, firstClickDate: null });
 
-    // For debugging
-    console.log(`Clicked date: ${date}, Shifted for comparison: ${clickedDate.toISOString().split('T')[0]}`);
+  // Handle date cell click to update start/end dates with two-click approach
+  const handleDateCellClick = (activity: Activity, date: string) => {
+    console.log(`Clicked date: ${date}`);
     console.log(`Activity start: ${activity.start_date}, end: ${activity.end_date}`);
 
-    // If clicked after end date, extend end date to include the clicked date
-    if (clickedDate.getTime() > endDate.getTime()) {
-      // We store the unshifted date to keep consistency
-      onEditActivity(activity.id, 'end_date', date);
-    } 
-    // If clicked before start date, move start date to clicked date
-    else if (clickedDate.getTime() < startDate.getTime()) {
-      // We store the unshifted date to keep consistency
+    // If this is the first click for this activity
+    if (twoClickState.activityId !== activity.id || twoClickState.firstClickDate === null) {
+      // Set start date on first click
       onEditActivity(activity.id, 'start_date', date);
+      
+      // Remember activity and click date
+      setTwoClickState({
+        activityId: activity.id,
+        firstClickDate: date
+      });
+      
+      console.log(`First click - set start date to: ${date}`);
+    } 
+    // This is the second click for the same activity
+    else {
+      const firstClickDate = new Date(twoClickState.firstClickDate);
+      const secondClickDate = new Date(date);
+      
+      // Reset time components for accurate date comparison
+      firstClickDate.setHours(0, 0, 0, 0);
+      secondClickDate.setHours(0, 0, 0, 0);
+      
+      // If second click is after first click, set end date
+      if (secondClickDate >= firstClickDate) {
+        onEditActivity(activity.id, 'end_date', date);
+        console.log(`Second click - set end date to: ${date}`);
+      } 
+      // If second click is before first click, swap them
+      else {
+        onEditActivity(activity.id, 'start_date', date);
+        onEditActivity(activity.id, 'end_date', twoClickState.firstClickDate);
+        console.log(`Second click before first - swapped dates`);
+      }
+      
+      // Reset the two-click state
+      setTwoClickState({ activityId: null, firstClickDate: null });
     }
-    // If clicked on a day within the range, do nothing for now
-    // Could implement other behavior like splitting the activity
   };
   
   // Handle keyboard events during editing
