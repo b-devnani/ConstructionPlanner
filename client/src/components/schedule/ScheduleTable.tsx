@@ -185,21 +185,37 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
     }
   };
   
-  // Only sort activities if:
-  // 1. The refresh button was clicked (refreshCounter changed)
-  // 2. The sort or group type was changed (which also changes refreshCounter)
+  // Only sort activities when refreshCounter changes
   let activitiesToUse = [...activities];
   
-  // Track previous refresh counter to detect changes
-  const [lastRefreshCounter, setLastRefreshCounter] = useState(refreshCounter);
+  // Use refreshCounter in a useEffect to trigger sorting
+  const [sortedActivities, setSortedActivities] = useState(activitiesToUse);
   
-  // Update last refresh counter when it changes
+  // Whenever refreshCounter, sortBy, or groupBy changes, resort the activities
   useEffect(() => {
-    setLastRefreshCounter(refreshCounter);
-  }, [refreshCounter]);
+    console.log("Sorting triggered - refreshCounter:", refreshCounter, "sortBy:", sortBy, "groupBy:", groupBy);
+    const sorted = [...activities].sort((a, b) => {
+      switch (sortBy) {
+        case 'start_date':
+          return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+        case 'end_date':
+          return new Date(a.end_date).getTime() - new Date(b.end_date).getTime();
+        case 'location':
+          return a.location.localeCompare(b.location);
+        case 'contractor':
+          return a.contractor.localeCompare(b.contractor);
+        default:
+          return 0;
+      }
+    });
+    setSortedActivities(sorted);
+  }, [refreshCounter, sortBy, groupBy, activities]);
   
-  // Only sort if the refresh button was clicked or sort/group type changed
-  if (refreshCounter !== lastRefreshCounter) {
+  // Use sortedActivities for display
+  activitiesToUse = sortedActivities;
+  
+  // For legacy compatibility, keep this if statement, but it's not used anymore
+  if (false) {
     activitiesToUse.sort((a, b) => {
       switch (sortBy) {
         case 'start_date':
