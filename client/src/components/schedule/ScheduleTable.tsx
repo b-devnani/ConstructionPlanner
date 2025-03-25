@@ -9,6 +9,7 @@ interface ScheduleTableProps {
   threeWeekView: ThreeWeekView;
   onEditActivity: (activityId: number, field: keyof Activity, value: string | number) => void;
   onEditClick: (activity: Activity) => void;
+  onAddActivity: (activity: Omit<Activity, 'id'>) => void;
   sortBy: string;
   groupBy: string;
   locations: Location[];
@@ -20,6 +21,7 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
   threeWeekView,
   onEditActivity,
   onEditClick,
+  onAddActivity,
   sortBy,
   groupBy,
   locations,
@@ -36,6 +38,25 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
   const [editValue, setEditValue] = useState<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
   const selectRef = useRef<HTMLSelectElement>(null);
+  
+  // State for New Row feature
+  const [showNewRow, setShowNewRow] = useState(false);
+  
+  // Default values for new activity
+  const getDefaultActivity = (): Omit<Activity, 'id'> => {
+    const today = new Date().toISOString().split('T')[0];
+    return {
+      name: '',
+      location: locations.length > 0 ? locations[0].name : '',
+      contractor: contractors.length > 0 ? contractors[0].name : '',
+      start_date: today,
+      end_date: today,
+      duration: 1
+    };
+  };
+  
+  // New activity data for inline creation
+  const [newActivity, setNewActivity] = useState<Omit<Activity, 'id'>>(getDefaultActivity());
   
   // Effect to focus the input when editing begins
   useEffect(() => {
@@ -257,6 +278,105 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
   const monthHeaders = getWeekHeaderInfo();
   
   // Render editable cell content
+  // Handle Add Activity button click
+  const handleAddActivityClick = () => {
+    setShowNewRow(true);
+    setNewActivity(getDefaultActivity());
+  };
+  
+  // Handle changes to new activity fields
+  const handleNewActivityChange = (field: keyof Omit<Activity, 'id'>, value: string | number) => {
+    setNewActivity(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      // Update duration if start or end date changes
+      if (field === 'start_date' || field === 'end_date') {
+        const startDate = field === 'start_date' ? String(value) : prev.start_date;
+        const endDate = field === 'end_date' ? String(value) : prev.end_date;
+        
+        // Calculate working days (simple calculation for now)
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const diffTime = Math.abs(end.getTime() - start.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end dates
+        
+        updated.duration = Math.max(1, diffDays);
+      }
+      
+      return updated;
+    });
+  };
+  
+  // Handle saving the new activity
+  const handleSaveNewActivity = () => {
+    // Submit the new activity
+    onAddActivity(newActivity);
+    
+    // Reset the form
+    setShowNewRow(false);
+    setNewActivity(getDefaultActivity());
+  };
+  
+  // Render editable cell for new activity
+  const renderNewActivityCell = (field: keyof Omit<Activity, 'id'>) => {
+    if (field === 'location') {
+      return (
+        <select
+          value={newActivity.location}
+          onChange={(e) => handleNewActivityChange(field, e.target.value)}
+          className={`w-full py-1 px-2 ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-slate-800'} border ${theme === 'dark' ? 'border-gray-600' : 'border-slate-300'} rounded-sm`}
+        >
+          {locations.map(location => (
+            <option key={location.id} value={location.name}>
+              {location.name}
+            </option>
+          ))}
+        </select>
+      );
+    } else if (field === 'contractor') {
+      return (
+        <select
+          value={newActivity.contractor}
+          onChange={(e) => handleNewActivityChange(field, e.target.value)}
+          className={`w-full py-1 px-2 ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-slate-800'} border ${theme === 'dark' ? 'border-gray-600' : 'border-slate-300'} rounded-sm`}
+        >
+          {contractors.map(contractor => (
+            <option key={contractor.id} value={contractor.name}>
+              {contractor.name}
+            </option>
+          ))}
+        </select>
+      );
+    } else if (field === 'start_date' || field === 'end_date') {
+      return (
+        <input
+          type="date"
+          value={newActivity[field]}
+          onChange={(e) => handleNewActivityChange(field, e.target.value)}
+          className={`w-full py-1 px-2 ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-slate-800'} border ${theme === 'dark' ? 'border-gray-600' : 'border-slate-300'} rounded-sm`}
+        />
+      );
+    } else if (field === 'name') {
+      return (
+        <input
+          type="text"
+          value={newActivity.name}
+          onChange={(e) => handleNewActivityChange(field, e.target.value)}
+          placeholder="Activity name"
+          className={`w-full py-1 px-2 ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-slate-800'} border ${theme === 'dark' ? 'border-gray-600' : 'border-slate-300'} rounded-sm`}
+        />
+      );
+    } else if (field === 'duration') {
+      return (
+        <div className={`${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'} px-2 py-1 rounded`}>
+          {newActivity.duration} days
+        </div>
+      );
+    }
+    
+    return null;
+  };
+
   const renderEditableCell = (activity: Activity, field: keyof Activity) => {
     const isEditing = editingCell.activityId === activity.id && editingCell.field === field;
     
