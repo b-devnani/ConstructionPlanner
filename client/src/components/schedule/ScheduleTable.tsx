@@ -163,6 +163,8 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
   const getWeekHeaderInfo = () => {
     if (!threeWeekView.weeks.length || !threeWeekView.weeks[0].days.length) return [];
     
+    console.log('DEBUG - Generating month headers from weeks:', threeWeekView.weeks);
+    
     const result = [];
     let currentMonth = '';
     let currentYear = '';
@@ -172,10 +174,14 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
     // Create a flat array of all days
     const allDays = threeWeekView.weeks.flatMap(week => week.days);
     
+    console.log('DEBUG - All days flattened:', allDays.map(day => day.date).join(', '));
+    
     for (let i = 0; i < allDays.length; i++) {
       const date = new Date(allDays[i].date);
       const month = date.toLocaleString('default', { month: 'long' });
       const year = date.getFullYear().toString();
+      
+      console.log('DEBUG - Processing day:', i, allDays[i].date, 'Month:', month, 'Year:', year);
       
       if (month !== currentMonth || year !== currentYear) {
         if (currentMonth) {
@@ -186,6 +192,7 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
             startIndex: monthStartIndex,
             span: monthSpan
           });
+          console.log('DEBUG - Added month header:', currentMonth, currentYear, 'Span:', monthSpan, 'Start:', monthStartIndex);
         }
         
         // Start a new month
@@ -367,6 +374,10 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                   headerClasses += ` ${theme === 'dark' ? 'border-slate-700' : 'border-slate-200'}`;
                   
                   // Add working day styling
+                  console.log('DEBUG - Day header styling for:', day.date, 
+                             'Day of week:', day.dayOfWeek, 
+                             'Working day:', day.isWorkingDay);
+                  
                   if (day.isWorkingDay) {
                     headerClasses += ` ${theme === 'dark' ? 'bg-gray-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`;
                   } else {
