@@ -39,9 +39,6 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const selectRef = useRef<HTMLSelectElement>(null);
   
-  // State for New Row feature
-  const [showNewRow, setShowNewRow] = useState(false);
-  
   // Default values for new activity
   const getDefaultActivity = (): Omit<Activity, 'id'> => {
     const today = new Date().toISOString().split('T')[0];
@@ -54,9 +51,6 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
       duration: 1
     };
   };
-  
-  // New activity data for inline creation
-  const [newActivity, setNewActivity] = useState<Omit<Activity, 'id'>>(getDefaultActivity());
   
   // Effect to focus the input when editing begins
   useEffect(() => {
@@ -280,102 +274,12 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
   // Render editable cell content
   // Handle Add Activity button click
   const handleAddActivityClick = () => {
-    setShowNewRow(true);
-    setNewActivity(getDefaultActivity());
+    // Get default activity and immediately add it
+    const defaultActivity = getDefaultActivity();
+    onAddActivity(defaultActivity);
   };
   
-  // Handle changes to new activity fields
-  const handleNewActivityChange = (field: keyof Omit<Activity, 'id'>, value: string | number) => {
-    setNewActivity(prev => {
-      const updated = { ...prev, [field]: value };
-      
-      // Update duration if start or end date changes
-      if (field === 'start_date' || field === 'end_date') {
-        const startDate = field === 'start_date' ? String(value) : prev.start_date;
-        const endDate = field === 'end_date' ? String(value) : prev.end_date;
-        
-        // Calculate working days (simple calculation for now)
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        const diffTime = Math.abs(end.getTime() - start.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end dates
-        
-        updated.duration = Math.max(1, diffDays);
-      }
-      
-      return updated;
-    });
-  };
-  
-  // Handle saving the new activity
-  const handleSaveNewActivity = () => {
-    // Submit the new activity
-    onAddActivity(newActivity);
-    
-    // Reset the form
-    setShowNewRow(false);
-    setNewActivity(getDefaultActivity());
-  };
-  
-  // Render editable cell for new activity
-  const renderNewActivityCell = (field: keyof Omit<Activity, 'id'>) => {
-    if (field === 'location') {
-      return (
-        <select
-          value={newActivity.location}
-          onChange={(e) => handleNewActivityChange(field, e.target.value)}
-          className={`w-full py-1 px-2 ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-slate-800'} border ${theme === 'dark' ? 'border-gray-600' : 'border-slate-300'} rounded-sm`}
-        >
-          {locations.map(location => (
-            <option key={location.id} value={location.name}>
-              {location.name}
-            </option>
-          ))}
-        </select>
-      );
-    } else if (field === 'contractor') {
-      return (
-        <select
-          value={newActivity.contractor}
-          onChange={(e) => handleNewActivityChange(field, e.target.value)}
-          className={`w-full py-1 px-2 ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-slate-800'} border ${theme === 'dark' ? 'border-gray-600' : 'border-slate-300'} rounded-sm`}
-        >
-          {contractors.map(contractor => (
-            <option key={contractor.id} value={contractor.name}>
-              {contractor.name}
-            </option>
-          ))}
-        </select>
-      );
-    } else if (field === 'start_date' || field === 'end_date') {
-      return (
-        <input
-          type="date"
-          value={newActivity[field]}
-          onChange={(e) => handleNewActivityChange(field, e.target.value)}
-          className={`w-full py-1 px-2 ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-slate-800'} border ${theme === 'dark' ? 'border-gray-600' : 'border-slate-300'} rounded-sm`}
-        />
-      );
-    } else if (field === 'name') {
-      return (
-        <input
-          type="text"
-          value={newActivity.name}
-          onChange={(e) => handleNewActivityChange(field, e.target.value)}
-          placeholder="Activity name"
-          className={`w-full py-1 px-2 ${theme === 'dark' ? 'bg-gray-700 text-white' : 'bg-white text-slate-800'} border ${theme === 'dark' ? 'border-gray-600' : 'border-slate-300'} rounded-sm`}
-        />
-      );
-    } else if (field === 'duration') {
-      return (
-        <div className={`${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'} px-2 py-1 rounded`}>
-          {newActivity.duration} days
-        </div>
-      );
-    }
-    
-    return null;
-  };
+
 
   const renderEditableCell = (activity: Activity, field: keyof Activity) => {
     const isEditing = editingCell.activityId === activity.id && editingCell.field === field;
@@ -562,49 +466,6 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
           </thead>
           
           <tbody className={`divide-y ${theme === 'dark' ? 'divide-slate-700' : 'divide-slate-200'}`}>
-            {/* Add Activity Row - visible when showNewRow is true */}
-            {showNewRow && (
-              <tr className={`${theme === 'dark' ? 'bg-gray-800/30' : 'bg-blue-50/50'}`}>
-                <td className={`px-4 py-2 text-sm sticky left-0 z-10 ${theme === 'dark' ? 'bg-gray-800/30' : 'bg-blue-50/50'} border-r ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'}`}>
-                  {renderNewActivityCell('name')}
-                </td>
-                <td className="px-4 py-2 text-sm">
-                  {renderNewActivityCell('location')}
-                </td>
-                <td className="px-4 py-2 text-sm">
-                  {renderNewActivityCell('contractor')}
-                </td>
-                <td className="px-4 py-2 text-sm">
-                  {renderNewActivityCell('start_date')}
-                </td>
-                <td className="px-4 py-2 text-sm">
-                  {renderNewActivityCell('end_date')}
-                </td>
-                <td className="px-4 py-2 text-sm">
-                  {renderNewActivityCell('duration')}
-                </td>
-                
-                {/* Empty cells for the timeline */}
-                {threeWeekView.weeks.flatMap(week => 
-                  week.days.map(day => (
-                    <td 
-                      key={`new-${day.date}`}
-                      className={`w-14 p-0 border ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'}`}
-                    />
-                  ))
-                )}
-                
-                {/* Save Button (appears at the end of the row) */}
-                <td className="absolute right-4 top-1/2 transform -translate-y-1/2">
-                  <button
-                    onClick={handleSaveNewActivity}
-                    className="ml-2 px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-xs"
-                  >
-                    Save
-                  </button>
-                </td>
-              </tr>
-            )}
             
             {Object.entries(groupedActivities).flatMap(([groupName, groupActivities]) => {
               // Use an array instead of React.Fragment to avoid Replit metadata issues
