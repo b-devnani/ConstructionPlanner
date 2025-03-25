@@ -186,10 +186,8 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
   };
   
   // Only sort activities if:
-  // 1. We're not in the middle of a two-click selection
-  // 2. We have finished two-click selection (endDateSet is true)
-  // 3. The refresh button was clicked (refreshCounter changed)
-  // 4. The sort or group type was changed (which also changes refreshCounter)
+  // 1. The refresh button was clicked (refreshCounter changed)
+  // 2. The sort or group type was changed (which also changes refreshCounter)
   let activitiesToUse = [...activities];
   
   // Track previous refresh counter to detect changes
@@ -200,11 +198,8 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
     setLastRefreshCounter(refreshCounter);
   }, [refreshCounter]);
   
-  // Only sort if either:
-  // 1. We're not in the middle of a two-click selection (twoClickState.activityId is null)
-  // 2. We have just completed a two-click selection (endDateSet is true)
-  // 3. The refresh button was clicked (refreshCounter changed)
-  if (twoClickState.activityId === null || twoClickState.endDateSet || refreshCounter !== lastRefreshCounter) {
+  // Only sort if the refresh button was clicked or sort/group type changed
+  if (refreshCounter !== lastRefreshCounter) {
     activitiesToUse.sort((a, b) => {
       switch (sortBy) {
         case 'start_date':
