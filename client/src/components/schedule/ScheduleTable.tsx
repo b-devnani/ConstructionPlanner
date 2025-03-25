@@ -357,14 +357,31 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
         displayValue = activity[field];
       }
       
-      const isEditableClass = field !== 'duration' ? 'hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer' : '';
+      const isEditableClass = field !== 'duration' 
+        ? `hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer 
+           relative transition-all duration-150 hover:shadow
+           after:content-[''] after:absolute after:bottom-0 after:left-0 
+           after:w-0 hover:after:w-full after:h-0.5 
+           after:bg-blue-500 after:transition-all after:duration-300` 
+        : '';
       
       return (
         <div 
-          className={`${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'} ${isEditableClass} px-2 py-1 rounded`}
+          className={`${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'} 
+                    ${isEditableClass} px-2 py-1 rounded group`}
           onClick={() => field !== 'duration' && handleStartEditing(activity, field)}
         >
           {displayValue}
+          {field !== 'duration' && (
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className="h-3 w-3 ml-1 opacity-0 group-hover:opacity-100 inline-block transition-opacity duration-200" 
+              viewBox="0 0 20 20" 
+              fill="currentColor"
+            >
+              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+            </svg>
+          )}
         </div>
       );
     }
@@ -517,8 +534,20 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                         const isActivityDay = activityFallsOnDate(activity, day.date);
                         const isWorkingDay = day.isWorkingDay;
                         
-                        // Construct class names carefully to avoid spacing issues
-                        let cellClasses = `w-14 p-0 border ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'} cursor-pointer hover:bg-opacity-80`;
+                        // Start date and end date indicators
+                        const isStartDate = activity.start_date === day.date;
+                        const isEndDate = activity.end_date === day.date;
+
+                        // Is this the first click in two-click mode
+                        const isFirstClick = twoClickState.activityId === activity.id && 
+                                           twoClickState.firstClickDate !== null;
+                        
+                        // Construct base class names
+                        let cellClasses = `w-14 h-6 p-0 border ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'} 
+                                          cursor-pointer relative transition-all duration-150
+                                          hover:shadow-md hover:z-10 hover:scale-105 hover:border-2
+                                          ${theme === 'dark' ? 'hover:border-blue-500' : 'hover:border-blue-400'}
+                                          active:scale-95 active:opacity-90`;
                         
                         // Add activity color if this is an activity day
                         if (isActivityDay) {
@@ -529,13 +558,85 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                         if (!isWorkingDay) {
                           cellClasses += ` ${theme === 'dark' ? 'bg-gray-700/60' : 'bg-slate-200/60'}`;
                         }
+
+                        // Add first click indicator
+                        if (isFirstClick && twoClickState.firstClickDate === day.date) {
+                          cellClasses += ` ring-2 ring-offset-1 ${theme === 'dark' ? 'ring-blue-400' : 'ring-blue-500'}`;
+                        }
+                        
+                        // Create the content for the cell
+                        const cellContent = (
+                          <>
+                            {/* Start date indicator - left triangle */}
+                            {isStartDate && (
+                              <div className={`absolute top-0 left-0 w-2 h-0 
+                                              border-t-[6px] border-r-[6px] border-b-0 
+                                              ${theme === 'dark' ? 'border-t-green-500 border-r-transparent' : 
+                                                                  'border-t-green-600 border-r-transparent'}`}>
+                              </div>
+                            )}
+                            
+                            {/* End date indicator - right triangle */}
+                            {isEndDate && (
+                              <div className={`absolute top-0 right-0 w-2 h-0 
+                                              border-t-[6px] border-l-[6px] border-b-0 
+                                              ${theme === 'dark' ? 'border-t-red-500 border-l-transparent' : 
+                                                                  'border-t-red-600 border-l-transparent'}`}>
+                              </div>
+                            )}
+                          </>
+                        );
                         
                         return (
                           <td 
                             key={`${activity.id}-${day.date}`}
                             className={cellClasses}
                             onClick={() => handleDateCellClick(activity, day.date)}
-                          ></td>
+                            draggable={isActivityDay}
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData('text/plain', JSON.stringify({
+                                activityId: activity.id,
+                                date: day.date,
+                                isStartDate,
+                                isEndDate
+                              }));
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault(); // Allow drop
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+                              // If we're dragging a start date, update the start date
+                              if (data.isStartDate) {
+                                onEditActivity(data.activityId, 'start_date', day.date);
+                              }
+                              // If we're dragging an end date, update the end date
+                              else if (data.isEndDate) {
+                                onEditActivity(data.activityId, 'end_date', day.date);
+                              }
+                              // If we're dragging a middle cell, move the entire activity
+                              else if (data.activityId) {
+                                const draggedActivity = activities.find(a => a.id === data.activityId);
+                                if (draggedActivity) {
+                                  // Use our daysDifference function to calculate the shift
+                                  const daysToShift = daysDifference(data.date, day.date);
+                                  
+                                  const newStartDate = new Date(draggedActivity.start_date);
+                                  newStartDate.setDate(newStartDate.getDate() + daysToShift);
+                                  
+                                  const newEndDate = new Date(draggedActivity.end_date);
+                                  newEndDate.setDate(newEndDate.getDate() + daysToShift);
+                                  
+                                  // Update both start and end dates to move the activity
+                                  onEditActivity(data.activityId, 'start_date', newStartDate.toISOString().split('T')[0]);
+                                  onEditActivity(data.activityId, 'end_date', newEndDate.toISOString().split('T')[0]);
+                                }
+                              }
+                            }}
+                          >
+                            {cellContent}
+                          </td>
                         );
                       })
                     )}

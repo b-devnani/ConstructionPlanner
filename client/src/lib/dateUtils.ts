@@ -56,3 +56,19 @@ export const daysBetween = (startDate: string, endDate: string): number => {
   // Convert to days and add 1 to include both start and end dates
   return Math.floor(timeDiff / (1000 * 60 * 60 * 24)) + 1;
 };
+
+// Calculate the number of days to shift (can be negative)
+export const daysDifference = (fromDate: string, toDate: string): number => {
+  const from = new Date(fromDate);
+  const to = new Date(toDate);
+  
+  // Reset time components for accurate date comparison
+  from.setHours(0, 0, 0, 0);
+  to.setHours(0, 0, 0, 0);
+  
+  // Calculate the time difference in milliseconds (can be negative)
+  const diffTime = to.getTime() - from.getTime();
+  
+  // Convert to days (rounded to nearest whole day)
+  return Math.round(diffTime / (1000 * 60 * 60 * 24));
+};
