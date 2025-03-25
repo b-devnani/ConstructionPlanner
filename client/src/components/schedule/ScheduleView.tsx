@@ -6,7 +6,7 @@ import ActivityFormModal from './ActivityFormModal';
 import SettingsButton from '../settings/SettingsButton';
 import ThemeToggle from '../ui/theme-toggle';
 import { Activity, ThreeWeekView, Week, Day, Location, Contractor } from '@/lib/types';
-import { addDays, getDateString } from '@/lib/dateUtils';
+import { addDays, getDateString, daysBetween } from '@/lib/dateUtils';
 import { useTheme } from '@/lib/ThemeContext';
 import { useProjectSettings } from '@/lib/ProjectSettingsContext';
 
@@ -27,6 +27,27 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
 }) => {
   const { theme } = useTheme();
   const { settings, isWorkingDay } = useProjectSettings();
+  
+  const calculateWorkingDays = (startDate: string, endDate: string): number => {
+    // Use daysBetween utility function to get the total calendar days
+    const totalDays = daysBetween(startDate, endDate);
+    
+    // Count working days - ensure it's at least 1 day
+    let workingDaysCount = 0;
+    
+    // Loop through each day and check if it's a working day
+    for (let i = 0; i <= totalDays; i++) {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + i);
+      const dateString = getDateString(date);
+      
+      if (isWorkingDay(dateString)) {
+        workingDaysCount++;
+      }
+    }
+    
+    return Math.max(1, workingDaysCount); // Ensure at least 1 day
+  };
   
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [threeWeekView, setThreeWeekView] = useState<ThreeWeekView>({ weeks: [] });
@@ -151,7 +172,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
       
       // Update duration if start or end date changes
       if (field === 'start_date' || field === 'end_date') {
-        const workingDays = settings.calculateWorkingDays(
+        const workingDays = calculateWorkingDays(
           field === 'start_date' ? String(value) : prev.start_date,
           field === 'end_date' ? String(value) : prev.end_date
         );
