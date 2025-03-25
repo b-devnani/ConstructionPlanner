@@ -118,7 +118,12 @@ export const ProjectSettingsProvider: React.FC<{ children: React.ReactNode }> = 
       6: 'saturday'
     };
     
-    return settings.workingDays[dayMap[dayOfWeek]];
+    const dayName = dayMap[dayOfWeek];
+    const isWorkDay = settings.workingDays[dayName];
+    
+    console.log(`Date: ${dateString}, Day: ${dayName}, Is Working Day: ${isWorkDay}`);
+    
+    return isWorkDay;
   };
   
   // Calculate working days between two dates
