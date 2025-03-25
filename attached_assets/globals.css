@@ -1,0 +1,157 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 248, 250, 252;
+  --background-end-rgb: 255, 255, 255;
+}
+
+.dark {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 17, 24, 39;
+  --background-end-rgb: 31, 41, 55;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+}
+
+/* Custom scrollbar for better UX */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgb(var(--background-start-rgb));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+/* Animations for better UX */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Table styling enhancements */
+.schedule-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.schedule-table th,
+.schedule-table td {
+  transition: background-color 0.2s ease;
+}
+
+.schedule-table tr:hover td {
+  filter: brightness(95%);
+}
+
+.dark .schedule-table tr:hover td {
+  filter: brightness(120%);
+}
+
+/* Button styling */
+.btn {
+  @apply px-4 py-2 rounded font-medium transition-colors duration-200;
+}
+
+.btn-primary {
+  @apply bg-blue-500 text-white hover:bg-blue-600;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600;
+}
+
+.btn-success {
+  @apply bg-green-500 text-white hover:bg-green-600;
+}
+
+.btn-danger {
+  @apply bg-red-500 text-white hover:bg-red-600;
+}
+
+/* Input styling */
+.input {
+  @apply px-3 py-2 rounded border focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200;
+}
+
+.dark .input {
+  @apply bg-gray-700 text-white border-gray-600;
+}
+
+/* Responsive design adjustments */
+@media (max-width: 768px) {
+  .schedule-container {
+    @apply px-2;
+  }
+  
+  .schedule-controls {
+    @apply flex-col space-y-2;
+  }
+  
+  .schedule-controls > div {
+    @apply w-full;
+  }
+}
+
+/* Theme toggle button animation */
+.theme-toggle {
+  @apply relative w-10 h-10 rounded-full flex items-center justify-center cursor-pointer;
+  transition: transform 0.5s ease;
+}
+
+.theme-toggle:hover {
+  transform: rotate(15deg);
+}
+
+.theme-toggle svg {
+  @apply absolute;
+  transition: opacity 0.3s ease, transform 0.5s ease;
+}
+
+.theme-toggle .sun {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.theme-toggle .moon {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+.dark .theme-toggle .sun {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+.dark .theme-toggle .moon {
+  opacity: 1;
+  transform: scale(1);
+}
