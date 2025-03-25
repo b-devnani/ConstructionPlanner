@@ -562,6 +562,50 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
           </thead>
           
           <tbody className={`divide-y ${theme === 'dark' ? 'divide-slate-700' : 'divide-slate-200'}`}>
+            {/* Add Activity Row - visible when showNewRow is true */}
+            {showNewRow && (
+              <tr className={`${theme === 'dark' ? 'bg-gray-800/30' : 'bg-blue-50/50'}`}>
+                <td className={`px-4 py-2 text-sm sticky left-0 z-10 ${theme === 'dark' ? 'bg-gray-800/30' : 'bg-blue-50/50'} border-r ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'}`}>
+                  {renderNewActivityCell('name')}
+                </td>
+                <td className="px-4 py-2 text-sm">
+                  {renderNewActivityCell('location')}
+                </td>
+                <td className="px-4 py-2 text-sm">
+                  {renderNewActivityCell('contractor')}
+                </td>
+                <td className="px-4 py-2 text-sm">
+                  {renderNewActivityCell('start_date')}
+                </td>
+                <td className="px-4 py-2 text-sm">
+                  {renderNewActivityCell('end_date')}
+                </td>
+                <td className="px-4 py-2 text-sm">
+                  {renderNewActivityCell('duration')}
+                </td>
+                
+                {/* Empty cells for the timeline */}
+                {threeWeekView.weeks.flatMap(week => 
+                  week.days.map(day => (
+                    <td 
+                      key={`new-${day.date}`}
+                      className={`w-14 p-0 border ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'}`}
+                    />
+                  ))
+                )}
+                
+                {/* Save Button (appears at the end of the row) */}
+                <td className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                  <button
+                    onClick={handleSaveNewActivity}
+                    className="ml-2 px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-xs"
+                  >
+                    Save
+                  </button>
+                </td>
+              </tr>
+            )}
+            
             {Object.entries(groupedActivities).flatMap(([groupName, groupActivities]) => {
               // Use an array instead of React.Fragment to avoid Replit metadata issues
               const rows = [];
@@ -646,15 +690,7 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
       {/* Add Activity Button at bottom of table */}
       <div className="mt-4 flex justify-end">
         <button
-          onClick={() => onEditClick({ 
-            id: -1, 
-            name: '', 
-            location: locations.length > 0 ? locations[0].name : '',
-            contractor: contractors.length > 0 ? contractors[0].name : '',
-            start_date: new Date().toISOString().split('T')[0],
-            end_date: new Date().toISOString().split('T')[0],
-            duration: 1
-          })}
+          onClick={handleAddActivityClick}
           className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md flex items-center"
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">

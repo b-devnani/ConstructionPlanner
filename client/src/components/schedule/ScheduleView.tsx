@@ -314,6 +314,7 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
           threeWeekView={threeWeekView}
           onEditActivity={onEditActivity}
           onEditClick={handleEditActivity}
+          onAddActivity={onAddActivity}
           sortBy={sortBy}
           groupBy={groupBy}
           locations={locations}
