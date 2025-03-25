@@ -352,7 +352,7 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
               </th>
               
               {/* Day Headers */}
-              {threeWeekView.weeks.map(week => (
+              {threeWeekView.weeks.flatMap(week => 
                 week.days.map(day => (
                   <th 
                     key={day.date}
@@ -370,7 +370,7 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                     </div>
                   </th>
                 ))
-              ))}
+              )}
             </tr>
           </thead>
           
@@ -413,7 +413,7 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                     </td>
                     
                     {/* Activity Timeline Cells */}
-                    {threeWeekView.weeks.map(week => (
+                    {threeWeekView.weeks.flatMap(week => 
                       week.days.map(day => {
                         const isActivityDay = activityFallsOnDate(activity, day.date);
                         const isWorkingDay = day.isWorkingDay;
@@ -429,7 +429,7 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                           ></td>
                         );
                       })
-                    ))}
+                    )}
                   </tr>
                 ))}
               </React.Fragment>
