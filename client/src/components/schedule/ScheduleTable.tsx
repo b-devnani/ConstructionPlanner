@@ -191,25 +191,48 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
   // Use refreshCounter in a useEffect to trigger sorting
   const [sortedActivities, setSortedActivities] = useState(activitiesToUse);
   
-  // Whenever refreshCounter, sortBy, or groupBy changes, resort the activities
+  // Track if we need to perform sorting
+  const [shouldSort, setShouldSort] = useState(false);
+  
+  // Handle activities change by tracking if sorting is needed
   useEffect(() => {
-    console.log("Sorting triggered - refreshCounter:", refreshCounter, "sortBy:", sortBy, "groupBy:", groupBy);
-    const sorted = [...activities].sort((a, b) => {
-      switch (sortBy) {
-        case 'start_date':
-          return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
-        case 'end_date':
-          return new Date(a.end_date).getTime() - new Date(b.end_date).getTime();
-        case 'location':
-          return a.location.localeCompare(b.location);
-        case 'contractor':
-          return a.contractor.localeCompare(b.contractor);
-        default:
-          return 0;
-      }
-    });
-    setSortedActivities(sorted);
-  }, [refreshCounter, sortBy, groupBy, activities]);
+    // Initialize sortedActivities with activities on first load only
+    if (!sortedActivities.length && activities.length) {
+      setSortedActivities(activities);
+    }
+    
+    // When activities change, we should update sortedActivities, but only sort if shouldSort is true
+    if (shouldSort) {
+      // Do sorting
+      console.log("Performing sort because refreshCounter, sortBy, or groupBy changed");
+      const sorted = [...activities].sort((a, b) => {
+        switch (sortBy) {
+          case 'start_date':
+            return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+          case 'end_date':
+            return new Date(a.end_date).getTime() - new Date(b.end_date).getTime();
+          case 'location':
+            return a.location.localeCompare(b.location);
+          case 'contractor':
+            return a.contractor.localeCompare(b.contractor);
+          default:
+            return 0;
+        }
+      });
+      setSortedActivities(sorted);
+      setShouldSort(false);
+    } else {
+      // Just update the activities without sorting
+      console.log("Updating activities without sorting");
+      setSortedActivities(activities);
+    }
+  }, [activities, shouldSort]);
+  
+  // When refreshCounter, sortBy, or groupBy changes, set shouldSort to true
+  useEffect(() => {
+    console.log("Sort trigger changed - Will sort on next activities update");
+    setShouldSort(true);
+  }, [refreshCounter, sortBy, groupBy]);
   
   // Use sortedActivities for display
   activitiesToUse = sortedActivities;
