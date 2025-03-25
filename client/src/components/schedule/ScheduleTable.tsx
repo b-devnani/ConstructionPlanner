@@ -356,11 +356,12 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                 week.days.map(day => (
                   <th 
                     key={day.date}
-                    className={`p-1 ${theme === 'dark' ? 'bg-gray-800' : 'bg-slate-100'} 
-                    text-center text-xs font-medium ${theme === 'dark' ? 'text-slate-300' : 'text-slate-600'} 
+                    className={`p-1 text-center text-xs font-medium 
                     uppercase tracking-wider w-14 border-l 
                     ${theme === 'dark' ? 'border-slate-700' : 'border-slate-200'}
-                    ${!day.isWorkingDay ? (theme === 'dark' ? 'bg-gray-700' : 'bg-slate-200') : ''}
+                    ${day.isWorkingDay 
+                      ? (theme === 'dark' ? 'bg-gray-800 text-slate-300' : 'bg-slate-100 text-slate-600') 
+                      : (theme === 'dark' ? 'bg-gray-700 text-slate-400' : 'bg-slate-200 text-slate-500')}
                     ${day.isToday ? (theme === 'dark' ? 'bg-blue-900/30' : 'bg-blue-100') : ''}`}
                   >
                     <div className="flex flex-col items-center">
@@ -375,7 +376,7 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
           
           <tbody className={`divide-y ${theme === 'dark' ? 'divide-slate-700' : 'divide-slate-200'}`}>
             {Object.entries(groupedActivities).map(([groupName, groupActivities]) => (
-              <React.Fragment key={groupName.toString()}>
+              <React.Fragment key={groupName}>
                 {groupBy !== 'none' && (
                   <tr className={theme === 'dark' ? 'bg-gray-800/50' : 'bg-slate-50'}>
                     <td colSpan={6 + threeWeekView.weeks.reduce((acc, week) => acc + week.days.length, 0)} 
@@ -422,7 +423,7 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                             key={`${activity.id}-${day.date}`}
                             className={`w-14 p-0 border ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'} 
                             ${isActivityDay ? getActivityColor(activity.contractor) : ''}
-                            ${!isWorkingDay ? (theme === 'dark' ? 'bg-gray-700' : 'bg-slate-100') : ''}
+                            ${!isWorkingDay ? (theme === 'dark' ? 'bg-gray-700/60' : 'bg-slate-200/60') : ''}
                             cursor-pointer hover:bg-opacity-80`}
                             onClick={() => handleDateCellClick(activity, day.date)}
                           ></td>
