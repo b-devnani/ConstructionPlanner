@@ -14,8 +14,9 @@ export const formatDateForDisplay = (dateString: string): string => {
 
 // Check if an activity falls on a specific date
 export const activityFallsOnDate = (activity: Activity, dateString: string): boolean => {
-  // Don't shift date as we want to match the exact day shown in the UI
+  // We need to shift date by one day again to match the new cell click handler
   const date = new Date(dateString);
+  date.setDate(date.getDate() + 1); // Shift by one day
   
   const startDate = new Date(activity.start_date);
   const endDate = new Date(activity.end_date);

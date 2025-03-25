@@ -91,24 +91,31 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
   const handleDateCellClick = (activity: Activity, date: string) => {
     console.log(`Clicked date: ${date}`);
     console.log(`Activity start: ${activity.start_date}, end: ${activity.end_date}`);
+    
+    // Shift the click date by 1 day as requested
+    const clickDate = new Date(date);
+    clickDate.setDate(clickDate.getDate() + 1);
+    const shiftedDate = clickDate.toISOString().split('T')[0];
+    
+    console.log(`Shifted date: ${shiftedDate}`);
 
     // If this is the first click for this activity
     if (twoClickState.activityId !== activity.id || twoClickState.firstClickDate === null) {
-      // Set start date on first click
-      onEditActivity(activity.id, 'start_date', date);
+      // Set start date on first click (with 1-day shift)
+      onEditActivity(activity.id, 'start_date', shiftedDate);
       
-      // Remember activity and click date
+      // Remember activity and click date (store the shifted date)
       setTwoClickState({
         activityId: activity.id,
-        firstClickDate: date
+        firstClickDate: shiftedDate
       });
       
-      console.log(`First click - set start date to: ${date}`);
+      console.log(`First click - set start date to: ${shiftedDate}`);
     } 
     // This is the second click for the same activity
     else {
       const firstClickDate = new Date(twoClickState.firstClickDate);
-      const secondClickDate = new Date(date);
+      const secondClickDate = new Date(shiftedDate);
       
       // Reset time components for accurate date comparison
       firstClickDate.setHours(0, 0, 0, 0);
@@ -116,12 +123,12 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
       
       // If second click is after first click, set end date
       if (secondClickDate >= firstClickDate) {
-        onEditActivity(activity.id, 'end_date', date);
-        console.log(`Second click - set end date to: ${date}`);
+        onEditActivity(activity.id, 'end_date', shiftedDate);
+        console.log(`Second click - set end date to: ${shiftedDate}`);
       } 
       // If second click is before first click, swap them
       else {
-        onEditActivity(activity.id, 'start_date', date);
+        onEditActivity(activity.id, 'start_date', shiftedDate);
         onEditActivity(activity.id, 'end_date', twoClickState.firstClickDate);
         console.log(`Second click before first - swapped dates`);
       }
