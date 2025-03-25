@@ -1,4 +1,3 @@
-'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Activity, ThreeWeekView, Location, Contractor } from '@/lib/types';
@@ -376,7 +375,7 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
           
           <tbody className={`divide-y ${theme === 'dark' ? 'divide-slate-700' : 'divide-slate-200'}`}>
             {Object.entries(groupedActivities).map(([groupName, groupActivities]) => (
-              <React.Fragment key={groupName}>
+              <React.Fragment key={groupName.toString()}>
                 {groupBy !== 'none' && (
                   <tr className={theme === 'dark' ? 'bg-gray-800/50' : 'bg-slate-50'}>
                     <td colSpan={6 + threeWeekView.weeks.reduce((acc, week) => acc + week.days.length, 0)} 
@@ -436,6 +435,26 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
             ))}
           </tbody>
         </table>
+      </div>
+      {/* Add Activity Button at bottom of table */}
+      <div className="mt-4 flex justify-end">
+        <button
+          onClick={() => onEditClick({ 
+            id: -1, 
+            name: '', 
+            location: locations.length > 0 ? locations[0].name : '',
+            contractor: contractors.length > 0 ? contractors[0].name : '',
+            start_date: new Date().toISOString().split('T')[0],
+            end_date: new Date().toISOString().split('T')[0],
+            duration: 1
+          })}
+          className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-md flex items-center"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add Activity
+        </button>
       </div>
     </div>
   );
