@@ -353,41 +353,62 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
               
               {/* Day Headers */}
               {threeWeekView.weeks.flatMap(week => 
-                week.days.map(day => (
-                  <th 
-                    key={day.date}
-                    className={`p-1 text-center text-xs font-medium 
-                    uppercase tracking-wider w-14 border-l 
-                    ${theme === 'dark' ? 'border-slate-700' : 'border-slate-200'}
-                    ${day.isWorkingDay 
-                      ? (theme === 'dark' ? 'bg-gray-800 text-slate-300' : 'bg-slate-100 text-slate-600') 
-                      : (theme === 'dark' ? 'bg-gray-700 text-slate-400' : 'bg-slate-200 text-slate-500')}
-                    ${day.isToday ? (theme === 'dark' ? 'bg-blue-900/30' : 'bg-blue-100') : ''}`}
-                  >
-                    <div className="flex flex-col items-center">
-                      <span className="font-medium">{day.dayOfWeek}</span>
-                      <span className="font-bold">{day.dayOfMonth}</span>
-                    </div>
-                  </th>
-                ))
+                week.days.map(day => {
+                  // Construct class names carefully to avoid spacing issues
+                  let headerClasses = "p-1 text-center text-xs font-medium uppercase tracking-wider w-14 border-l";
+                  
+                  // Add border styling
+                  headerClasses += ` ${theme === 'dark' ? 'border-slate-700' : 'border-slate-200'}`;
+                  
+                  // Add working day styling
+                  if (day.isWorkingDay) {
+                    headerClasses += ` ${theme === 'dark' ? 'bg-gray-800 text-slate-300' : 'bg-slate-100 text-slate-600'}`;
+                  } else {
+                    headerClasses += ` ${theme === 'dark' ? 'bg-gray-700 text-slate-400' : 'bg-slate-200 text-slate-500'}`;
+                  }
+                  
+                  // Add today styling
+                  if (day.isToday) {
+                    headerClasses += ` ${theme === 'dark' ? 'bg-blue-900/30' : 'bg-blue-100'}`;
+                  }
+                  
+                  return (
+                    <th 
+                      key={day.date}
+                      className={headerClasses}
+                    >
+                      <div className="flex flex-col items-center">
+                        <span className="font-medium">{day.dayOfWeek}</span>
+                        <span className="font-bold">{day.dayOfMonth}</span>
+                      </div>
+                    </th>
+                  );
+                })
               )}
             </tr>
           </thead>
           
           <tbody className={`divide-y ${theme === 'dark' ? 'divide-slate-700' : 'divide-slate-200'}`}>
-            {Object.entries(groupedActivities).map(([groupName, groupActivities]) => (
-              <React.Fragment key={groupName}>
-                {groupBy !== 'none' && (
-                  <tr className={theme === 'dark' ? 'bg-gray-800/50' : 'bg-slate-50'}>
+            {Object.entries(groupedActivities).flatMap(([groupName, groupActivities]) => {
+              // Use an array instead of React.Fragment to avoid Replit metadata issues
+              const rows = [];
+              
+              // Add the group header row if needed
+              if (groupBy !== 'none') {
+                rows.push(
+                  <tr key={`group-${groupName}`} className={theme === 'dark' ? 'bg-gray-800/50' : 'bg-slate-50'}>
                     <td colSpan={6 + threeWeekView.weeks.reduce((acc, week) => acc + week.days.length, 0)} 
                         className={`px-4 py-2 font-medium text-sm ${theme === 'dark' ? 'text-slate-200' : 'text-slate-900'} sticky left-0 z-10`}>
                       {groupName}
                     </td>
                   </tr>
-                )}
-                
-                {groupActivities.map(activity => (
-                  <tr key={activity.id} className={`hover:${theme === 'dark' ? 'bg-gray-800/50' : 'bg-slate-50'}`}>
+                );
+              }
+              
+              // Add all the activity rows
+              groupActivities.forEach(activity => {
+                rows.push(
+                  <tr key={`activity-${activity.id}`} className={`hover:${theme === 'dark' ? 'bg-gray-800/50' : 'bg-slate-50'}`}>
                     <td className={`px-4 py-2 text-sm sticky left-0 z-10 ${theme === 'dark' ? 'bg-gray-850' : 'bg-white'} border-r ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'}`}>
                       {renderEditableCell(activity, 'name')}
                     </td>
@@ -418,22 +439,34 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                         const isActivityDay = activityFallsOnDate(activity, day.date);
                         const isWorkingDay = day.isWorkingDay;
                         
+                        // Construct class names carefully to avoid spacing issues
+                        let cellClasses = `w-14 p-0 border ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'} cursor-pointer hover:bg-opacity-80`;
+                        
+                        // Add activity color if this is an activity day
+                        if (isActivityDay) {
+                          cellClasses += ` ${getActivityColor(activity.contractor)}`;
+                        }
+                        
+                        // Add non-working day styling (only if it's not a working day)
+                        if (!isWorkingDay) {
+                          cellClasses += ` ${theme === 'dark' ? 'bg-gray-700/60' : 'bg-slate-200/60'}`;
+                        }
+                        
                         return (
                           <td 
                             key={`${activity.id}-${day.date}`}
-                            className={`w-14 p-0 border ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'} 
-                            ${isActivityDay ? getActivityColor(activity.contractor) : ''}
-                            ${!isWorkingDay ? (theme === 'dark' ? 'bg-gray-700/60' : 'bg-slate-200/60') : ''}
-                            cursor-pointer hover:bg-opacity-80`}
+                            className={cellClasses}
                             onClick={() => handleDateCellClick(activity, day.date)}
                           ></td>
                         );
                       })
                     )}
                   </tr>
-                ))}
-              </React.Fragment>
-            ))}
+                );
+              });
+              
+              return rows;
+            })}
           </tbody>
         </table>
       </div>
