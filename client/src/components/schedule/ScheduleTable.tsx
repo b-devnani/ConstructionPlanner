@@ -85,19 +85,28 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
   const handleDateCellClick = (activity: Activity, date: string) => {
     const startDate = new Date(activity.start_date);
     const endDate = new Date(activity.end_date);
+    
+    // Create a new clicked date with 1-day shift to fix the off-by-one issue
     const clickedDate = new Date(date);
+    clickedDate.setDate(clickedDate.getDate() + 1);
     
     // Reset time components for accurate date comparison
     startDate.setHours(0, 0, 0, 0);
     endDate.setHours(0, 0, 0, 0);
     clickedDate.setHours(0, 0, 0, 0);
 
+    // For debugging
+    console.log(`Clicked date: ${date}, Shifted for comparison: ${clickedDate.toISOString().split('T')[0]}`);
+    console.log(`Activity start: ${activity.start_date}, end: ${activity.end_date}`);
+
     // If clicked after end date, extend end date to include the clicked date
     if (clickedDate.getTime() > endDate.getTime()) {
+      // We store the unshifted date to keep consistency
       onEditActivity(activity.id, 'end_date', date);
     } 
     // If clicked before start date, move start date to clicked date
     else if (clickedDate.getTime() < startDate.getTime()) {
+      // We store the unshifted date to keep consistency
       onEditActivity(activity.id, 'start_date', date);
     }
     // If clicked on a day within the range, do nothing for now
@@ -177,7 +186,9 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
     console.log('DEBUG - All days flattened:', allDays.map(day => day.date).join(', '));
     
     for (let i = 0; i < allDays.length; i++) {
+      // Shift the date calculation by one day forward for correct month display
       const date = new Date(allDays[i].date);
+      date.setDate(date.getDate() + 1); // Shift by one day
       const month = date.toLocaleString('default', { month: 'long' });
       const year = date.getFullYear().toString();
       

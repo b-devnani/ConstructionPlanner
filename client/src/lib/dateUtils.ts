@@ -14,7 +14,10 @@ export const formatDateForDisplay = (dateString: string): string => {
 
 // Check if an activity falls on a specific date
 export const activityFallsOnDate = (activity: Activity, dateString: string): boolean => {
+  // Create a new date from the dateString parameter and shift by one day
   const date = new Date(dateString);
+  date.setDate(date.getDate() + 1);
+  
   const startDate = new Date(activity.start_date);
   const endDate = new Date(activity.end_date);
   

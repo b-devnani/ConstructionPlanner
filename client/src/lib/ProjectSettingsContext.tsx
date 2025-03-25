@@ -106,7 +106,11 @@ export const ProjectSettingsProvider: React.FC<{ children: React.ReactNode }> = 
     
     // Check if it's a weekend or non-working day
     const date = new Date(dateString);
-    const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    // Shift the day calculation by adding one day
+    const shiftedDate = new Date(date);
+    shiftedDate.setDate(shiftedDate.getDate() + 1);
+    
+    const dayOfWeek = shiftedDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
     
     const dayMap: { [key: number]: keyof WorkingDays } = {
       0: 'sunday',
