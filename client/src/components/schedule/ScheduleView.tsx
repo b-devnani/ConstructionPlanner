@@ -272,6 +272,18 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
 
             {/* Sort & Group Options */}
             <div className="flex flex-wrap items-center space-x-3">
+              {/* Refresh Button */}
+              <button
+                onClick={() => setRefreshCounter(prev => prev + 1)}
+                className={`px-3 py-2 ${theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-slate-200 hover:bg-slate-300'} rounded-md transition-colors duration-150 flex items-center`}
+                title="Refresh sorting"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+              
               {/* Sort Option */}
               <div className="flex items-center space-x-2">
                 <label htmlFor="sortBy" className="text-sm font-medium whitespace-nowrap">Sort By:</label>
@@ -310,18 +322,6 @@ const ScheduleView: React.FC<ScheduleViewProps> = ({
                   <option value="contractor">Contractor</option>
                 </select>
               </div>
-
-              {/* Refresh Button */}
-              <button
-                onClick={() => setRefreshCounter(prev => prev + 1)}
-                className={`px-3 py-1.5 ${theme === 'dark' ? 'bg-gray-700 hover:bg-gray-600' : 'bg-slate-200 hover:bg-slate-300'} rounded-md transition-colors duration-150 flex items-center text-sm`}
-                title="Refresh sorting and grouping"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Refresh
-              </button>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Activity, ThreeWeekView, Location, Contractor } from '@/lib/types';
-import { activityFallsOnDate, formatDateForDisplay } from '@/lib/dateUtils';
+import { activityFallsOnDate, formatDateForDisplay, daysDifference } from '@/lib/dateUtils';
 import { useTheme } from '@/lib/ThemeContext';
 
 interface ScheduleTableProps {
