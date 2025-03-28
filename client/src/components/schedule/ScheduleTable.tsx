@@ -98,79 +98,105 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
     setEditingCell({ activityId: null, field: null });
   };
   
-  // Track which activity is being set with two clicks
-  const [twoClickState, setTwoClickState] = useState<{
-    activityId: number | null;
-    firstClickDate: string | null;
-    endDateSet: boolean;
-  }>({ 
-    activityId: null, 
-    firstClickDate: null,
-    endDateSet: false
-  });
-
-  // Handle date cell click to update start/end dates with two-click approach
+  // Handle date cell click to toggle the activity status for this date (checkbox-like behavior)
   const handleDateCellClick = (activity: Activity, date: string) => {
     console.log(`Clicked date: ${date}`);
     console.log(`Activity start: ${activity.start_date}, end: ${activity.end_date}`);
     
-    // Shift the click date by 1 day as requested
+    // Shift the click date by 1 day as requested (this is to maintain consistency with existing code)
     const clickDate = new Date(date);
     clickDate.setDate(clickDate.getDate() + 1);
     const shiftedDate = clickDate.toISOString().split('T')[0];
     
-    console.log(`Shifted date: ${shiftedDate}`);
+    console.log(`Shifted date for cell click: ${shiftedDate}`);
 
-    // If this is the first click for this activity
-    if (twoClickState.activityId !== activity.id || twoClickState.firstClickDate === null) {
-      // Set start date on first click (with 1-day shift)
-      onEditActivity(activity.id, 'start_date', shiftedDate);
+    // Check if this date is already in the activity's range
+    const isDateInActivity = activityFallsOnDate(activity, date);
+    
+    if (isDateInActivity) {
+      // If the date is already in the activity, we need to remove it
+      console.log(`Removing date ${shiftedDate} from activity`);
       
-      // Remember activity and click date (store the shifted date)
-      setTwoClickState({
-        activityId: activity.id,
-        firstClickDate: shiftedDate,
-        endDateSet: false
-      });
-      
-      console.log(`First click - set start date to: ${shiftedDate}`);
-    } 
-    // This is the second click for the same activity
-    else {
-      const firstClickDate = new Date(twoClickState.firstClickDate);
-      const secondClickDate = new Date(shiftedDate);
+      // Calculate new start and end dates based on the clicked date
+      const currentStart = new Date(activity.start_date);
+      const currentEnd = new Date(activity.end_date);
+      const dateToToggle = new Date(shiftedDate);
       
       // Reset time components for accurate date comparison
-      firstClickDate.setHours(0, 0, 0, 0);
-      secondClickDate.setHours(0, 0, 0, 0);
+      currentStart.setHours(0, 0, 0, 0);
+      currentEnd.setHours(0, 0, 0, 0);
+      dateToToggle.setHours(0, 0, 0, 0);
       
-      // If second click is after first click, set end date
-      if (secondClickDate >= firstClickDate) {
-        onEditActivity(activity.id, 'end_date', shiftedDate);
-        console.log(`Second click - set end date to: ${shiftedDate}`);
-      } 
-      // If second click is before first click, swap them
+      // If the clicked date is the start date
+      if (dateToToggle.getTime() === currentStart.getTime()) {
+        if (currentStart.getTime() === currentEnd.getTime()) {
+          // This is a single-day activity, set both to empty (or handle as needed)
+          console.log("Single day activity - clearing dates");
+          onEditActivity(activity.id, 'start_date', '');
+          onEditActivity(activity.id, 'end_date', '');
+        } else {
+          // Move start date one day forward
+          const newStartDate = new Date(currentStart);
+          newStartDate.setDate(newStartDate.getDate() + 1);
+          console.log(`Moving start date to ${newStartDate.toISOString().split('T')[0]}`);
+          onEditActivity(activity.id, 'start_date', newStartDate.toISOString().split('T')[0]);
+        }
+      }
+      // If the clicked date is the end date
+      else if (dateToToggle.getTime() === currentEnd.getTime()) {
+        // Move end date one day back
+        const newEndDate = new Date(currentEnd);
+        newEndDate.setDate(newEndDate.getDate() - 1);
+        console.log(`Moving end date to ${newEndDate.toISOString().split('T')[0]}`);
+        onEditActivity(activity.id, 'end_date', newEndDate.toISOString().split('T')[0]);
+      }
+      // If the clicked date is in the middle, split the activity
       else {
+        console.log("Splitting activity not supported - will just remove the date");
+        // This would be complex to implement - for now, we'll just ignore middle dates
+        // In a real app, you might want to split the activity into two segments
+      }
+    } else {
+      // If the date is not in the activity, we need to add it
+      console.log(`Adding date ${shiftedDate} to activity`);
+      
+      // If activity has no start/end dates yet, set both to this date
+      if (!activity.start_date || !activity.end_date) {
+        console.log("Setting initial activity dates");
         onEditActivity(activity.id, 'start_date', shiftedDate);
-        onEditActivity(activity.id, 'end_date', twoClickState.firstClickDate);
-        console.log(`Second click before first - swapped dates`);
+        onEditActivity(activity.id, 'end_date', shiftedDate);
+        return;
       }
       
-      // Reset the two-click state and set endDateSet to true
-      setTwoClickState({ 
-        activityId: null, 
-        firstClickDate: null,
-        endDateSet: true
-      });
+      const currentStart = new Date(activity.start_date);
+      const currentEnd = new Date(activity.end_date);
+      const dateToToggle = new Date(shiftedDate);
       
-      // We'll let the endDateSet state naturally transition back to false
-      // on the next render cycle when we reset the state
-      setTimeout(() => {
-        setTwoClickState(prev => ({
-          ...prev,
-          endDateSet: false
-        }));
-      }, 200);
+      // Reset time components for accurate date comparison
+      currentStart.setHours(0, 0, 0, 0);
+      currentEnd.setHours(0, 0, 0, 0);
+      dateToToggle.setHours(0, 0, 0, 0);
+      
+      // If the clicked date is before the start date
+      if (dateToToggle < currentStart) {
+        console.log("Extending start date backward");
+        onEditActivity(activity.id, 'start_date', shiftedDate);
+      }
+      // If the clicked date is after the end date
+      else if (dateToToggle > currentEnd) {
+        console.log("Extending end date forward");
+        onEditActivity(activity.id, 'end_date', shiftedDate);
+      }
+      // If the clicked date is exactly 1 day before the start, extend start backwards
+      else if ((currentStart.getTime() - dateToToggle.getTime()) === 86400000) {
+        console.log("Extending start date backward by 1 day");
+        onEditActivity(activity.id, 'start_date', shiftedDate);
+      }
+      // If the clicked date is exactly 1 day after the end, extend end forwards
+      else if ((dateToToggle.getTime() - currentEnd.getTime()) === 86400000) {
+        console.log("Extending end date forward by 1 day");
+        onEditActivity(activity.id, 'end_date', shiftedDate);
+      }
     }
   };
   
@@ -572,23 +598,10 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                 rows.push(
                   <tr 
                     key={`activity-${activity.id}`} 
-                    className={`hover:${theme === 'dark' ? 'bg-gray-800/50' : 'bg-slate-50'} ${
-                      // If another row is in first-click mode, this row should be greyed out
-                      twoClickState.activityId !== null && twoClickState.activityId !== activity.id && !twoClickState.endDateSet
-                        ? 'opacity-30'
-                        : ''
-                    } ${
-                      // Highlight the row if it's selected in two-click mode
-                      twoClickState.activityId === activity.id && !twoClickState.endDateSet
-                        ? theme === 'dark' ? 'bg-blue-900/20 !opacity-100' : 'bg-blue-50 !opacity-100'
-                        : ''
-                    } transition-opacity duration-300`}
+                    className={`hover:${theme === 'dark' ? 'bg-gray-800/50' : 'bg-slate-50'} transition-all duration-200`}
                   >
                     <td className={`px-4 py-2 text-sm sticky left-0 z-10 ${
-                      // Match the row highlight for the sticky column
-                      twoClickState.activityId === activity.id && !twoClickState.endDateSet 
-                        ? theme === 'dark' ? 'bg-blue-900/20' : 'bg-blue-50'
-                        : theme === 'dark' ? 'bg-gray-850' : 'bg-white'
+                      theme === 'dark' ? 'bg-gray-850' : 'bg-white'
                     } border-r ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'}`}>
                       {renderEditableCell(activity, 'name')}
                     </td>
@@ -623,35 +636,47 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                         const isStartDate = activity.start_date === day.date;
                         const isEndDate = activity.end_date === day.date;
 
-                        // Is this the first click in two-click mode
-                        const isFirstClick = twoClickState.activityId === activity.id && 
-                                           twoClickState.firstClickDate !== null;
-                        
-                        // Construct base class names
+                        // Construct base class names - make it look like a checkbox when active
                         let cellClasses = `w-14 h-6 p-0 border ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'} 
                                           cursor-pointer relative transition-all duration-150
-                                          hover:shadow-md hover:z-10 hover:scale-105 hover:border-2
-                                          ${theme === 'dark' ? 'hover:border-blue-500' : 'hover:border-blue-400'}
-                                          active:scale-95 active:opacity-90`;
+                                          hover:shadow-md hover:z-10 hover:scale-105`;
                         
-                        // Add activity color if this is an activity day
+                        // Add hover effects
                         if (isActivityDay) {
-                          cellClasses += ` ${getActivityColor(activity.contractor)}`;
+                          // When active, show hover as "removing" the activity
+                          cellClasses += ` hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-400 hover:border-2
+                                         ${getActivityColor(activity.contractor)}`;
+                        } else {
+                          // When inactive, show hover as "adding" the activity
+                          cellClasses += ` hover:bg-green-50 dark:hover:bg-green-900/20 hover:border-green-400 hover:border-2
+                                         ${theme === 'dark' ? 'bg-gray-800/80' : 'bg-slate-100/70'}`;
                         }
                         
                         // Add non-working day styling (only if it's not a working day)
                         if (!isWorkingDay) {
                           cellClasses += ` ${theme === 'dark' ? 'bg-gray-700/60' : 'bg-slate-200/60'}`;
                         }
-
-                        // Add first click indicator
-                        if (isFirstClick && twoClickState.firstClickDate === day.date) {
-                          cellClasses += ` ring-2 ring-offset-1 ${theme === 'dark' ? 'ring-blue-400' : 'ring-blue-500'}`;
-                        }
                         
-                        // Create the content for the cell
+                        // Create the checkbox-like content
                         const cellContent = (
-                          <>
+                          <div className="w-full h-full flex items-center justify-center">
+                            {isActivityDay && (
+                              <div className={`w-3 h-3 rounded-sm ${theme === 'dark' ? 'bg-white/80' : 'bg-slate-700'}`}>
+                                <svg 
+                                  xmlns="http://www.w3.org/2000/svg" 
+                                  viewBox="0 0 20 20" 
+                                  fill="currentColor"
+                                  className={`w-3 h-3 ${theme === 'dark' ? 'text-blue-900' : 'text-blue-500'}`}
+                                >
+                                  <path 
+                                    fillRule="evenodd" 
+                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" 
+                                    clipRule="evenodd" 
+                                  />
+                                </svg>
+                              </div>
+                            )}
+                            
                             {/* Start date indicator - left triangle */}
                             {isStartDate && (
                               <div className={`absolute top-0 left-0 w-2 h-0 
@@ -669,7 +694,7 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                                                                   'border-t-red-600 border-l-transparent'}`}>
                               </div>
                             )}
-                          </>
+                          </div>
                         );
                         
                         return (
@@ -677,6 +702,7 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                             key={`${activity.id}-${day.date}`}
                             className={cellClasses}
                             onClick={() => handleDateCellClick(activity, day.date)}
+                            title={isActivityDay ? `Remove ${activity.name} on ${formatDateForDisplay(day.date)}` : `Add ${activity.name} on ${formatDateForDisplay(day.date)}`}
                             draggable={isActivityDay}
                             onDragStart={(e) => {
                               e.dataTransfer.setData('text/plain', JSON.stringify({
