@@ -98,90 +98,79 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
     setEditingCell({ activityId: null, field: null });
   };
   
-  // Handle date cell click to toggle the individual cell (true checkbox behavior - each cell is independent)
+  // Track which activity is being set with two clicks
+  const [twoClickState, setTwoClickState] = useState<{
+    activityId: number | null;
+    firstClickDate: string | null;
+    endDateSet: boolean;
+  }>({ 
+    activityId: null, 
+    firstClickDate: null,
+    endDateSet: false
+  });
+
+  // Handle date cell click to update start/end dates with two-click approach
   const handleDateCellClick = (activity: Activity, date: string) => {
     console.log(`Clicked date: ${date}`);
+    console.log(`Activity start: ${activity.start_date}, end: ${activity.end_date}`);
     
-    // Check if this date is already in the activity's range (between start and end dates)
-    let isDateInActivity = false;
+    // Shift the click date by 1 day as requested
+    const clickDate = new Date(date);
+    clickDate.setDate(clickDate.getDate() + 1);
+    const shiftedDate = clickDate.toISOString().split('T')[0];
     
-    if (activity.start_date && activity.end_date) {
-      const clickedDate = new Date(date);
-      const startDate = new Date(activity.start_date);
-      const endDate = new Date(activity.end_date);
+    console.log(`Shifted date: ${shiftedDate}`);
+
+    // If this is the first click for this activity
+    if (twoClickState.activityId !== activity.id || twoClickState.firstClickDate === null) {
+      // Set start date on first click (with 1-day shift)
+      onEditActivity(activity.id, 'start_date', shiftedDate);
+      
+      // Remember activity and click date (store the shifted date)
+      setTwoClickState({
+        activityId: activity.id,
+        firstClickDate: shiftedDate,
+        endDateSet: false
+      });
+      
+      console.log(`First click - set start date to: ${shiftedDate}`);
+    } 
+    // This is the second click for the same activity
+    else {
+      const firstClickDate = new Date(twoClickState.firstClickDate);
+      const secondClickDate = new Date(shiftedDate);
       
       // Reset time components for accurate date comparison
-      clickedDate.setHours(0, 0, 0, 0);
-      startDate.setHours(0, 0, 0, 0);
-      endDate.setHours(0, 0, 0, 0);
+      firstClickDate.setHours(0, 0, 0, 0);
+      secondClickDate.setHours(0, 0, 0, 0);
       
-      isDateInActivity = clickedDate >= startDate && clickedDate <= endDate;
-    }
-    
-    // Create an array of active dates for this activity
-    const activeDays: string[] = [];
-    
-    // Get all days between start and end date
-    if (activity.start_date && activity.end_date) {
-      let currentDate = new Date(activity.start_date);
-      const endDate = new Date(activity.end_date);
-      
-      // Reset time components for accurate date comparison
-      currentDate.setHours(0, 0, 0, 0);
-      endDate.setHours(0, 0, 0, 0);
-      
-      // Add all days between start and end to our active days array
-      while (currentDate <= endDate) {
-        activeDays.push(currentDate.toISOString().split('T')[0]);
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-    }
-    
-    if (isDateInActivity) {
-      // If the date is already active, we need to remove it from the active days
-      console.log(`Removing date ${date} from activity`);
-      
-      // Filter out the clicked date from active days
-      const newActiveDays = activeDays.filter(d => d !== date);
-      
-      if (newActiveDays.length === 0) {
-        // If no active days left, clear the activity dates
-        onEditActivity(activity.id, 'start_date', '');
-        onEditActivity(activity.id, 'end_date', '');
-        return;
+      // If second click is after first click, set end date
+      if (secondClickDate >= firstClickDate) {
+        onEditActivity(activity.id, 'end_date', shiftedDate);
+        console.log(`Second click - set end date to: ${shiftedDate}`);
+      } 
+      // If second click is before first click, swap them
+      else {
+        onEditActivity(activity.id, 'start_date', shiftedDate);
+        onEditActivity(activity.id, 'end_date', twoClickState.firstClickDate);
+        console.log(`Second click before first - swapped dates`);
       }
       
-      // Sort the remaining days to find new start and end dates
-      newActiveDays.sort();
+      // Reset the two-click state and set endDateSet to true
+      setTwoClickState({ 
+        activityId: null, 
+        firstClickDate: null,
+        endDateSet: true
+      });
       
-      // Update start date to the first active day
-      onEditActivity(activity.id, 'start_date', newActiveDays[0]);
-      
-      // Update end date to the last active day
-      onEditActivity(activity.id, 'end_date', newActiveDays[newActiveDays.length - 1]);
-      
-    } else {
-      // If the date is not active, we need to add it
-      console.log(`Adding date ${date} to activity`);
-      
-      // Add the clicked date to our active days
-      activeDays.push(date);
-      
-      // If this is the first day being added, set both start and end to this date
-      if (activeDays.length === 1) {
-        onEditActivity(activity.id, 'start_date', date);
-        onEditActivity(activity.id, 'end_date', date);
-        return;
-      }
-      
-      // Sort the active days to find new start and end dates
-      activeDays.sort();
-      
-      // Update start date to the first active day
-      onEditActivity(activity.id, 'start_date', activeDays[0]);
-      
-      // Update end date to the last active day
-      onEditActivity(activity.id, 'end_date', activeDays[activeDays.length - 1]);
+      // We'll let the endDateSet state naturally transition back to false
+      // on the next render cycle when we reset the state
+      setTimeout(() => {
+        setTwoClickState(prev => ({
+          ...prev,
+          endDateSet: false
+        }));
+      }, 200);
     }
   };
   
@@ -583,10 +572,23 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                 rows.push(
                   <tr 
                     key={`activity-${activity.id}`} 
-                    className={`hover:${theme === 'dark' ? 'bg-gray-800/50' : 'bg-slate-50'} transition-all duration-200`}
+                    className={`hover:${theme === 'dark' ? 'bg-gray-800/50' : 'bg-slate-50'} ${
+                      // If another row is in first-click mode, this row should be greyed out
+                      twoClickState.activityId !== null && twoClickState.activityId !== activity.id && !twoClickState.endDateSet
+                        ? 'opacity-30'
+                        : ''
+                    } ${
+                      // Highlight the row if it's selected in two-click mode
+                      twoClickState.activityId === activity.id && !twoClickState.endDateSet
+                        ? theme === 'dark' ? 'bg-blue-900/20 !opacity-100' : 'bg-blue-50 !opacity-100'
+                        : ''
+                    } transition-opacity duration-300`}
                   >
                     <td className={`px-4 py-2 text-sm sticky left-0 z-10 ${
-                      theme === 'dark' ? 'bg-gray-850' : 'bg-white'
+                      // Match the row highlight for the sticky column
+                      twoClickState.activityId === activity.id && !twoClickState.endDateSet 
+                        ? theme === 'dark' ? 'bg-blue-900/20' : 'bg-blue-50'
+                        : theme === 'dark' ? 'bg-gray-850' : 'bg-white'
                     } border-r ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'}`}>
                       {renderEditableCell(activity, 'name')}
                     </td>
@@ -614,56 +616,42 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                     {/* Activity Timeline Cells */}
                     {threeWeekView.weeks.flatMap(week => 
                       week.days.map(day => {
-                        // Determine if this day is in the activity range by directly comparing with start/end dates
-                        let isActivityDay = false;
-                        
-                        if (activity.start_date && activity.end_date) {
-                          const cellDate = new Date(day.date);
-                          const startDate = new Date(activity.start_date);
-                          const endDate = new Date(activity.end_date);
-                          
-                          // Reset time components for accurate date comparison
-                          cellDate.setHours(0, 0, 0, 0);
-                          startDate.setHours(0, 0, 0, 0);
-                          endDate.setHours(0, 0, 0, 0);
-                          
-                          isActivityDay = cellDate >= startDate && cellDate <= endDate;
-                        }
-                        
+                        const isActivityDay = activityFallsOnDate(activity, day.date);
                         const isWorkingDay = day.isWorkingDay;
                         
                         // Start date and end date indicators
                         const isStartDate = activity.start_date === day.date;
                         const isEndDate = activity.end_date === day.date;
 
-                        // Construct base class names - make it look like a checkbox when active
+                        // Is this the first click in two-click mode
+                        const isFirstClick = twoClickState.activityId === activity.id && 
+                                           twoClickState.firstClickDate !== null;
+                        
+                        // Construct base class names
                         let cellClasses = `w-14 h-6 p-0 border ${theme === 'dark' ? 'border-slate-700' : 'border-slate-100'} 
                                           cursor-pointer relative transition-all duration-150
-                                          hover:shadow-md hover:z-10 hover:scale-105`;
+                                          hover:shadow-md hover:z-10 hover:scale-105 hover:border-2
+                                          ${theme === 'dark' ? 'hover:border-blue-500' : 'hover:border-blue-400'}
+                                          active:scale-95 active:opacity-90`;
                         
-                        // Add hover effects
+                        // Add activity color if this is an activity day
                         if (isActivityDay) {
-                          // When active, show hover as "removing" the activity
-                          cellClasses += ` hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-400 hover:border-2
-                                         ${getActivityColor(activity.contractor)}`;
-                        } else {
-                          // When inactive, show hover as "adding" the activity
-                          cellClasses += ` hover:bg-green-50 dark:hover:bg-green-900/20 hover:border-green-400 hover:border-2
-                                         ${theme === 'dark' ? 'bg-gray-800/80' : 'bg-slate-100/70'}`;
+                          cellClasses += ` ${getActivityColor(activity.contractor)}`;
                         }
                         
                         // Add non-working day styling (only if it's not a working day)
                         if (!isWorkingDay) {
                           cellClasses += ` ${theme === 'dark' ? 'bg-gray-700/60' : 'bg-slate-200/60'}`;
                         }
+
+                        // Add first click indicator
+                        if (isFirstClick && twoClickState.firstClickDate === day.date) {
+                          cellClasses += ` ring-2 ring-offset-1 ${theme === 'dark' ? 'ring-blue-400' : 'ring-blue-500'}`;
+                        }
                         
-                        // Create the cell content with a cleaner filled dot for activity days
+                        // Create the content for the cell
                         const cellContent = (
-                          <div className="w-full h-full flex items-center justify-center">
-                            {isActivityDay && (
-                              <div className={`w-3 h-3 rounded-full ${theme === 'dark' ? 'bg-blue-400' : 'bg-blue-500'}`}></div>
-                            )}
-                            
+                          <>
                             {/* Start date indicator - left triangle */}
                             {isStartDate && (
                               <div className={`absolute top-0 left-0 w-2 h-0 
@@ -681,7 +669,7 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                                                                   'border-t-red-600 border-l-transparent'}`}>
                               </div>
                             )}
-                          </div>
+                          </>
                         );
                         
                         return (
@@ -689,7 +677,6 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                             key={`${activity.id}-${day.date}`}
                             className={cellClasses}
                             onClick={() => handleDateCellClick(activity, day.date)}
-                            title={isActivityDay ? `Remove ${activity.name} on ${formatDateForDisplay(day.date)}` : `Add ${activity.name} on ${formatDateForDisplay(day.date)}`}
                             draggable={isActivityDay}
                             onDragStart={(e) => {
                               e.dataTransfer.setData('text/plain', JSON.stringify({
