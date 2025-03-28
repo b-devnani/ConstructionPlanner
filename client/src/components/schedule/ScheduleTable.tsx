@@ -98,114 +98,90 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
     setEditingCell({ activityId: null, field: null });
   };
   
-  // Handle date cell click to toggle the activity status for this date (checkbox-like behavior)
+  // Handle date cell click to toggle the individual cell (true checkbox behavior - each cell is independent)
   const handleDateCellClick = (activity: Activity, date: string) => {
     console.log(`Clicked date: ${date}`);
-    console.log(`Activity start: ${activity.start_date}, end: ${activity.end_date}`);
     
-    // Use the clicked date directly without shifting (to fix the wonky date issue)
-    const shiftedDate = date;
-
-    // Check if this date is already in the activity's range
-    const isDateInActivity = activityFallsOnDate(activity, date);
+    // Check if this date is already in the activity's range (between start and end dates)
+    let isDateInActivity = false;
     
-    if (isDateInActivity) {
-      // If the date is already in the activity, we need to remove it
-      console.log(`Removing date ${shiftedDate} from activity`);
-      
-      // Calculate new start and end dates based on the clicked date
-      const currentStart = new Date(activity.start_date);
-      const currentEnd = new Date(activity.end_date);
-      const dateToToggle = new Date(shiftedDate);
+    if (activity.start_date && activity.end_date) {
+      const clickedDate = new Date(date);
+      const startDate = new Date(activity.start_date);
+      const endDate = new Date(activity.end_date);
       
       // Reset time components for accurate date comparison
-      currentStart.setHours(0, 0, 0, 0);
-      currentEnd.setHours(0, 0, 0, 0);
-      dateToToggle.setHours(0, 0, 0, 0);
+      clickedDate.setHours(0, 0, 0, 0);
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(0, 0, 0, 0);
       
-      // If the clicked date is the start date
-      if (dateToToggle.getTime() === currentStart.getTime()) {
-        if (currentStart.getTime() === currentEnd.getTime()) {
-          // This is a single-day activity, set both to empty (or handle as needed)
-          console.log("Single day activity - clearing dates");
-          onEditActivity(activity.id, 'start_date', '');
-          onEditActivity(activity.id, 'end_date', '');
-        } else {
-          // Move start date one day forward
-          const newStartDate = new Date(currentStart);
-          newStartDate.setDate(newStartDate.getDate() + 1);
-          console.log(`Moving start date to ${newStartDate.toISOString().split('T')[0]}`);
-          onEditActivity(activity.id, 'start_date', newStartDate.toISOString().split('T')[0]);
-        }
-      }
-      // If the clicked date is the end date
-      else if (dateToToggle.getTime() === currentEnd.getTime()) {
-        // Move end date one day back
-        const newEndDate = new Date(currentEnd);
-        newEndDate.setDate(newEndDate.getDate() - 1);
-        console.log(`Moving end date to ${newEndDate.toISOString().split('T')[0]}`);
-        onEditActivity(activity.id, 'end_date', newEndDate.toISOString().split('T')[0]);
-      }
-      // If the clicked date is in the middle, handle splitting by creating a gap
-      else {
-        console.log("Removing date in the middle by creating a gap");
-        
-        // Create an end date for the first segment (one day before clicked date)
-        const firstSegmentEnd = new Date(dateToToggle);
-        firstSegmentEnd.setDate(firstSegmentEnd.getDate() - 1);
-        
-        // Create a start date for the second segment (one day after clicked date)
-        const secondSegmentStart = new Date(dateToToggle);
-        secondSegmentStart.setDate(secondSegmentStart.getDate() + 1);
-        
-        // For simplicity in our model, we'll just update the original activity to be the first segment
-        // And then create a new activity for the second segment
-        
-        // But in this implementation, we'll just shrink the activity to end at the day before the clicked date
-        // This effectively removes the day without full splitting
-        onEditActivity(activity.id, 'end_date', firstSegmentEnd.toISOString().split('T')[0]);
-      }
-    } else {
-      // If the date is not in the activity, we need to add it
-      console.log(`Adding date ${shiftedDate} to activity`);
+      isDateInActivity = clickedDate >= startDate && clickedDate <= endDate;
+    }
+    
+    // Create an array of active dates for this activity
+    const activeDays: string[] = [];
+    
+    // Get all days between start and end date
+    if (activity.start_date && activity.end_date) {
+      let currentDate = new Date(activity.start_date);
+      const endDate = new Date(activity.end_date);
       
-      // If activity has no start/end dates yet, set both to this date
-      if (!activity.start_date || !activity.end_date) {
-        console.log("Setting initial activity dates");
-        onEditActivity(activity.id, 'start_date', shiftedDate);
-        onEditActivity(activity.id, 'end_date', shiftedDate);
+      // Reset time components for accurate date comparison
+      currentDate.setHours(0, 0, 0, 0);
+      endDate.setHours(0, 0, 0, 0);
+      
+      // Add all days between start and end to our active days array
+      while (currentDate <= endDate) {
+        activeDays.push(currentDate.toISOString().split('T')[0]);
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    }
+    
+    if (isDateInActivity) {
+      // If the date is already active, we need to remove it from the active days
+      console.log(`Removing date ${date} from activity`);
+      
+      // Filter out the clicked date from active days
+      const newActiveDays = activeDays.filter(d => d !== date);
+      
+      if (newActiveDays.length === 0) {
+        // If no active days left, clear the activity dates
+        onEditActivity(activity.id, 'start_date', '');
+        onEditActivity(activity.id, 'end_date', '');
         return;
       }
       
-      const currentStart = new Date(activity.start_date);
-      const currentEnd = new Date(activity.end_date);
-      const dateToToggle = new Date(shiftedDate);
+      // Sort the remaining days to find new start and end dates
+      newActiveDays.sort();
       
-      // Reset time components for accurate date comparison
-      currentStart.setHours(0, 0, 0, 0);
-      currentEnd.setHours(0, 0, 0, 0);
-      dateToToggle.setHours(0, 0, 0, 0);
+      // Update start date to the first active day
+      onEditActivity(activity.id, 'start_date', newActiveDays[0]);
       
-      // If the clicked date is before the start date
-      if (dateToToggle < currentStart) {
-        console.log("Extending start date backward");
-        onEditActivity(activity.id, 'start_date', shiftedDate);
+      // Update end date to the last active day
+      onEditActivity(activity.id, 'end_date', newActiveDays[newActiveDays.length - 1]);
+      
+    } else {
+      // If the date is not active, we need to add it
+      console.log(`Adding date ${date} to activity`);
+      
+      // Add the clicked date to our active days
+      activeDays.push(date);
+      
+      // If this is the first day being added, set both start and end to this date
+      if (activeDays.length === 1) {
+        onEditActivity(activity.id, 'start_date', date);
+        onEditActivity(activity.id, 'end_date', date);
+        return;
       }
-      // If the clicked date is after the end date
-      else if (dateToToggle > currentEnd) {
-        console.log("Extending end date forward");
-        onEditActivity(activity.id, 'end_date', shiftedDate);
-      }
-      // If the clicked date is exactly 1 day before the start, extend start backwards
-      else if ((currentStart.getTime() - dateToToggle.getTime()) === 86400000) {
-        console.log("Extending start date backward by 1 day");
-        onEditActivity(activity.id, 'start_date', shiftedDate);
-      }
-      // If the clicked date is exactly 1 day after the end, extend end forwards
-      else if ((dateToToggle.getTime() - currentEnd.getTime()) === 86400000) {
-        console.log("Extending end date forward by 1 day");
-        onEditActivity(activity.id, 'end_date', shiftedDate);
-      }
+      
+      // Sort the active days to find new start and end dates
+      activeDays.sort();
+      
+      // Update start date to the first active day
+      onEditActivity(activity.id, 'start_date', activeDays[0]);
+      
+      // Update end date to the last active day
+      onEditActivity(activity.id, 'end_date', activeDays[activeDays.length - 1]);
     }
   };
   
@@ -638,7 +614,22 @@ const ScheduleTable: React.FC<ScheduleTableProps> = ({
                     {/* Activity Timeline Cells */}
                     {threeWeekView.weeks.flatMap(week => 
                       week.days.map(day => {
-                        const isActivityDay = activityFallsOnDate(activity, day.date);
+                        // Determine if this day is in the activity range by directly comparing with start/end dates
+                        let isActivityDay = false;
+                        
+                        if (activity.start_date && activity.end_date) {
+                          const cellDate = new Date(day.date);
+                          const startDate = new Date(activity.start_date);
+                          const endDate = new Date(activity.end_date);
+                          
+                          // Reset time components for accurate date comparison
+                          cellDate.setHours(0, 0, 0, 0);
+                          startDate.setHours(0, 0, 0, 0);
+                          endDate.setHours(0, 0, 0, 0);
+                          
+                          isActivityDay = cellDate >= startDate && cellDate <= endDate;
+                        }
+                        
                         const isWorkingDay = day.isWorkingDay;
                         
                         // Start date and end date indicators
