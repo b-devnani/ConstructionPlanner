@@ -8,6 +8,7 @@ import {
 import {
   PageHeader, TextField, SelectField, TextAreaField, FormField, EmptyState,
 } from "@/components/procore/shared";
+import { AttachmentsSection } from "@/components/procore/AttachmentsSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -270,6 +271,12 @@ export default function DailyLogPage() {
               <CardHeader className="pb-3"><CardTitle className="text-base">Equipment On Site</CardTitle></CardHeader>
               <CardContent>
                 <TextAreaField label="" value={draft.equipmentOnSite} onChange={set("equipmentOnSite")} rows={3} />
+              </CardContent>
+            </Card>
+            <Card className="md:col-span-2">
+              <CardHeader className="pb-3"><CardTitle className="text-base">Photos &amp; Documents</CardTitle></CardHeader>
+              <CardContent>
+                <AttachmentsSection entityType="dailyLog" entityId={draft.id} title="Site Photos" />
               </CardContent>
             </Card>
           </div>

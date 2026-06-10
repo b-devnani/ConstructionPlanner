@@ -14,7 +14,19 @@ import {
   type ChangeOrderLineItem, type InsertChangeOrderLineItem,
   type BudgetLineItem, type InsertBudgetLineItem,
   type BudgetRow, type BudgetSummary, type ContractFinancials,
+  type User, type SafeUser,
+  type Attachment,
+  type SubmittalStep, type InsertSubmittalStep,
+  type Notification,
+  type DrawingPin, type InsertDrawingPin,
+  type Commitment, type InsertCommitment,
+  type CommitmentLineItem, type InsertCommitmentLineItem,
+  type OwnerInvoice, type InsertOwnerInvoice,
+  type InvoiceLineItem, type InsertInvoiceLineItem,
+  type G702Summary, type G703Row,
 } from "@shared/procore";
+import { PersistenceManager, createSnapshotStore, type Snapshot } from "./persistence";
+import { hashPassword } from "./password";
 
 const now = () => new Date().toISOString();
 const today = () => new Date().toISOString().split("T")[0];
@@ -44,10 +56,23 @@ export class ProcoreStorage {
   private changeOrders = new Map<number, ChangeOrder>();
   private changeOrderLineItems = new Map<number, ChangeOrderLineItem>();
   private budgetLineItems = new Map<number, BudgetLineItem>();
+  private users = new Map<number, User>();
+  private attachments = new Map<number, Attachment>();
+  private submittalSteps = new Map<number, SubmittalStep>();
+  private notifications = new Map<number, Notification>();
+  private drawingPins = new Map<number, DrawingPin>();
+  private commitments = new Map<number, Commitment>();
+  private commitmentLineItems = new Map<number, CommitmentLineItem>();
+  private ownerInvoices = new Map<number, OwnerInvoice>();
+  private invoiceLineItems = new Map<number, InvoiceLineItem>();
+
+  private persistence: PersistenceManager | null = null;
 
   private nextId: Record<string, number> = {
     submittal: 1, rfi: 1, drawing: 1, spec: 1, dailyLog: 1, manpower: 1,
     punch: 1, sov: 1, changeEvent: 1, ceLine: 1, changeOrder: 1, coLine: 1, budget: 1,
+    user: 1, attachment: 1, submittalStep: 1, notification: 1, drawingPin: 1,
+    commitment: 1, commitmentLine: 1, invoice: 1, invoiceLine: 1,
   };
 
   constructor() {
@@ -71,7 +96,78 @@ export class ProcoreStorage {
       exclusions: "Owner-furnished medical equipment, FF&E, low-voltage cabling beyond conduit and boxes, utility company fees.",
       createdAt: now(),
     };
-    this.seed();
+  }
+
+  /**
+   * Loads the persisted snapshot (PostgreSQL when DATABASE_URL is set, JSON
+   * file otherwise) or seeds demo data on first boot, then wraps all mutating
+   * methods so every write schedules a debounced persist.
+   */
+  async init(): Promise<void> {
+    const store = createSnapshotStore();
+    const snapshot = await store.load();
+    if (snapshot) {
+      this.loadSnapshot(snapshot);
+    } else {
+      this.seed();
+    }
+    this.persistence = new PersistenceManager(store, () => this.toSnapshot());
+    this.wrapMutators();
+    if (!snapshot) this.persistence.schedule();
+    console.log(`[storage] persistence backend: ${store.describe()}`);
+  }
+
+  private collections(): Record<string, Map<number, any>> {
+    return {
+      submittals: this.submittals, rfis: this.rfis, drawings: this.drawings,
+      specSections: this.specSections, dailyLogs: this.dailyLogs,
+      manpowerEntries: this.manpowerEntries, punchItems: this.punchItems,
+      sovLineItems: this.sovLineItems, changeEvents: this.changeEvents,
+      changeEventLineItems: this.changeEventLineItems, changeOrders: this.changeOrders,
+      changeOrderLineItems: this.changeOrderLineItems, budgetLineItems: this.budgetLineItems,
+      users: this.users, attachments: this.attachments, submittalSteps: this.submittalSteps,
+      notifications: this.notifications, drawingPins: this.drawingPins,
+      commitments: this.commitments, commitmentLineItems: this.commitmentLineItems,
+      ownerInvoices: this.ownerInvoices, invoiceLineItems: this.invoiceLineItems,
+    };
+  }
+
+  private toSnapshot(): Snapshot {
+    const snapshot: Snapshot = {
+      meta: { nextId: this.nextId },
+      primeContract: this.primeContract,
+    };
+    for (const [key, map] of Object.entries(this.collections())) {
+      snapshot[key] = Array.from(map.values());
+    }
+    return snapshot;
+  }
+
+  private loadSnapshot(snapshot: Snapshot): void {
+    const meta = snapshot.meta as { nextId?: Record<string, number> } | undefined;
+    if (meta?.nextId) this.nextId = { ...this.nextId, ...meta.nextId };
+    if (snapshot.primeContract) this.primeContract = snapshot.primeContract as PrimeContract;
+    for (const [key, map] of Object.entries(this.collections())) {
+      const rows = snapshot[key];
+      if (!Array.isArray(rows)) continue;
+      map.clear();
+      for (const row of rows) map.set(row.id, row);
+    }
+  }
+
+  /** Wraps every create/update/delete/respond/mark method to persist after writes. */
+  private wrapMutators(): void {
+    const proto = Object.getPrototypeOf(this);
+    for (const name of Object.getOwnPropertyNames(proto)) {
+      if (!/^(create|update|delete|respond|mark)/.test(name)) continue;
+      const original = (this as any)[name];
+      if (typeof original !== "function") continue;
+      (this as any)[name] = (...args: unknown[]) => {
+        const result = original.apply(this, args);
+        this.persistence?.schedule();
+        return result;
+      };
+    }
   }
 
   // ----- generic helpers -----
@@ -450,22 +546,41 @@ export class ProcoreStorage {
     return byCode;
   }
 
+  /** Executed/complete commitment dollars grouped by cost code. */
+  private commitmentAmountsByCostCode(): Map<string, number> {
+    const activeIds = new Set(
+      this.getCommitments()
+        .filter(c => c.status === "Executed" || c.status === "Complete")
+        .map(c => c.id),
+    );
+    const byCode = new Map<string, number>();
+    Array.from(this.commitmentLineItems.values()).forEach(line => {
+      if (!activeIds.has(line.commitmentId)) return;
+      byCode.set(line.costCode, (byCode.get(line.costCode) ?? 0) + line.amount);
+    });
+    return byCode;
+  }
+
   getBudgetSummary(): BudgetSummary {
     const coByCode = this.approvedCoAmountsByCostCode();
+    const commitByCode = this.commitmentAmountsByCostCode();
     const matchedCodes = new Set<string>();
 
     const rows: BudgetRow[] = this.getBudgetLineItems().map(item => {
       const approvedCOs = coByCode.get(item.costCode) ?? 0;
       if (coByCode.has(item.costCode)) matchedCodes.add(item.costCode);
+      // committed = manual entry + executed commitments (subcontracts/POs)
+      const committedCosts = item.committedCosts + (commitByCode.get(item.costCode) ?? 0);
       const revisedBudget = item.originalBudget + item.budgetModifications + approvedCOs;
-      const projectedCosts = item.committedCosts + item.directCosts + item.pendingBudgetChanges;
+      const projectedCosts = committedCosts + item.directCosts + item.pendingBudgetChanges;
       return {
         ...item,
+        committedCosts,
         approvedCOs,
         revisedBudget,
         projectedCosts,
         projectedOverUnder: revisedBudget - projectedCosts,
-        forecastToComplete: Math.max(0, revisedBudget - item.committedCosts - item.directCosts),
+        forecastToComplete: Math.max(0, revisedBudget - committedCosts - item.directCosts),
       };
     });
 
@@ -511,6 +626,445 @@ export class ProcoreStorage {
       revisedContractValue: originalContractValue + approved,
       pendingRevisedContractValue: originalContractValue + approved + pending,
     };
+  }
+
+  // ----- Users & directory -----
+
+  private toSafeUser(user: User): SafeUser {
+    const { passwordHash, ...safe } = user;
+    return safe;
+  }
+
+  getUsers(): SafeUser[] {
+    return this.list(this.users).map(u => this.toSafeUser(u));
+  }
+
+  getUser(id: number): SafeUser | undefined {
+    const user = this.users.get(id);
+    return user ? this.toSafeUser(user) : undefined;
+  }
+
+  getUserWithPassword(email: string): User | undefined {
+    return this.list(this.users).find(
+      u => u.email.toLowerCase() === email.toLowerCase(),
+    );
+  }
+
+  findUserByName(name: string): SafeUser | undefined {
+    const needle = name.trim().toLowerCase();
+    if (!needle) return undefined;
+    const user = this.list(this.users).find(u => u.name.toLowerCase() === needle);
+    return user ? this.toSafeUser(user) : undefined;
+  }
+
+  createUser(data: Omit<User, "id" | "createdAt">): SafeUser {
+    const id = this.nextId.user++;
+    const user: User = { ...data, id, createdAt: now() };
+    this.users.set(id, user);
+    return this.toSafeUser(user);
+  }
+
+  updateUser(id: number, data: Partial<User>): SafeUser | undefined {
+    const existing = this.users.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...data, id };
+    this.users.set(id, updated);
+    return this.toSafeUser(updated);
+  }
+
+  deleteUser(id: number): boolean { return this.users.delete(id); }
+
+  // ----- Attachments -----
+
+  getAttachments(entityType: string, entityId: number): Attachment[] {
+    return this.list(this.attachments).filter(
+      a => a.entityType === entityType && a.entityId === entityId,
+    );
+  }
+
+  getAttachment(id: number): Attachment | undefined { return this.attachments.get(id); }
+
+  createAttachment(data: Omit<Attachment, "id" | "createdAt">): Attachment {
+    const id = this.nextId.attachment++;
+    const attachment: Attachment = { ...data, id, createdAt: now() };
+    this.attachments.set(id, attachment);
+    return attachment;
+  }
+
+  deleteAttachment(id: number): boolean { return this.attachments.delete(id); }
+
+  // ----- Submittal workflow steps -----
+
+  getSubmittalSteps(submittalId: number): SubmittalStep[] {
+    return this.list(this.submittalSteps)
+      .filter(s => s.submittalId === submittalId)
+      .sort((a, b) => a.stepNumber - b.stepNumber);
+  }
+
+  getSubmittalStep(id: number): SubmittalStep | undefined {
+    return this.submittalSteps.get(id);
+  }
+
+  createSubmittalStep(data: InsertSubmittalStep): SubmittalStep {
+    const id = this.nextId.submittalStep++;
+    const step: SubmittalStep = { ...data, id };
+    this.submittalSteps.set(id, step);
+    // Putting the first pending step in play moves the submittal into review
+    const submittal = this.submittals.get(data.submittalId);
+    if (submittal && (submittal.status === "Draft" || submittal.status === "Open")) {
+      const firstPending = this.getSubmittalSteps(data.submittalId).find(s => s.status === "Pending");
+      if (firstPending) {
+        this.updateSubmittal(submittal.id, {
+          status: "Pending Approval",
+          ballInCourt: firstPending.approverName,
+          dateSubmitted: submittal.dateSubmitted ?? today(),
+        });
+      }
+    }
+    return step;
+  }
+
+  deleteSubmittalStep(id: number): boolean { return this.submittalSteps.delete(id); }
+
+  /**
+   * Records an approver's response and advances the workflow: approvals move
+   * ball-in-court to the next pending step (or close out the review), while
+   * rejections/revise-and-resubmit send it back to the responsible contractor.
+   */
+  respondToSubmittalStep(
+    stepId: number,
+    status: SubmittalStep["status"],
+    comments: string,
+  ): { step: SubmittalStep; submittal: Submittal | undefined } | undefined {
+    const step = this.submittalSteps.get(stepId);
+    if (!step) return undefined;
+    const updated: SubmittalStep = { ...step, status, comments, respondedAt: now() };
+    this.submittalSteps.set(stepId, updated);
+
+    let submittal = this.submittals.get(step.submittalId);
+    if (submittal) {
+      if (status === "Approved" || status === "Approved as Noted") {
+        const next = this.getSubmittalSteps(step.submittalId).find(s => s.status === "Pending");
+        if (next) {
+          submittal = this.updateSubmittal(submittal.id, {
+            status: "Pending Approval",
+            ballInCourt: next.approverName,
+          });
+        } else {
+          const anyNoted = this.getSubmittalSteps(step.submittalId)
+            .some(s => s.status === "Approved as Noted");
+          submittal = this.updateSubmittal(submittal.id, {
+            status: anyNoted ? "Approved as Noted" : "Approved",
+            ballInCourt: submittal.responsibleContractor,
+            dateReturned: today(),
+          });
+        }
+      } else if (status === "Revise and Resubmit" || status === "Rejected") {
+        submittal = this.updateSubmittal(submittal.id, {
+          status,
+          ballInCourt: submittal.responsibleContractor,
+          dateReturned: today(),
+        });
+      }
+    }
+    return { step: updated, submittal };
+  }
+
+  // ----- Notifications -----
+
+  getNotifications(userId: number): Notification[] {
+    return this.list(this.notifications)
+      .filter(n => n.userId === userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  createNotification(data: Omit<Notification, "id" | "createdAt">): Notification {
+    const id = this.nextId.notification++;
+    const notification: Notification = { ...data, id, createdAt: now() };
+    this.notifications.set(id, notification);
+    return notification;
+  }
+
+  hasNotification(userId: number, entityType: string, entityId: number, title: string): boolean {
+    return this.list(this.notifications).some(
+      n => n.userId === userId && n.entityType === entityType &&
+        n.entityId === entityId && n.title === title,
+    );
+  }
+
+  markNotificationRead(id: number): Notification | undefined {
+    const existing = this.notifications.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, read: true };
+    this.notifications.set(id, updated);
+    return updated;
+  }
+
+  markAllNotificationsRead(userId: number): void {
+    Array.from(this.notifications.values()).forEach(n => {
+      if (n.userId === userId && !n.read) {
+        this.notifications.set(n.id, { ...n, read: true });
+      }
+    });
+    this.persistence?.schedule();
+  }
+
+  // ----- Drawing pins -----
+
+  getDrawingPins(drawingId: number): DrawingPin[] {
+    return this.list(this.drawingPins).filter(p => p.drawingId === drawingId);
+  }
+
+  createDrawingPin(data: InsertDrawingPin): DrawingPin {
+    const id = this.nextId.drawingPin++;
+    const pin: DrawingPin = { ...data, id, createdAt: now() };
+    this.drawingPins.set(id, pin);
+    return pin;
+  }
+
+  updateDrawingPin(id: number, data: Partial<DrawingPin>): DrawingPin | undefined {
+    const existing = this.drawingPins.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...data, id };
+    this.drawingPins.set(id, updated);
+    return updated;
+  }
+
+  deleteDrawingPin(id: number): boolean { return this.drawingPins.delete(id); }
+
+  // ----- Commitments (subcontracts & purchase orders) -----
+
+  getCommitments(): Commitment[] { return this.list(this.commitments); }
+  getCommitment(id: number): Commitment | undefined { return this.commitments.get(id); }
+
+  createCommitment(data: InsertCommitment): Commitment {
+    const id = this.nextId.commitment++;
+    const prefix = data.commitmentType === "Purchase Order" ? "PO" : "SC";
+    const sameType = this.getCommitments()
+      .filter(c => c.commitmentType === (data.commitmentType ?? "Subcontract")).length;
+    const commitment: Commitment = {
+      ...data,
+      number: data.number ?? `${prefix}-${pad(sameType + 1)}`,
+      id,
+      createdAt: now(),
+    };
+    this.commitments.set(id, commitment);
+    return commitment;
+  }
+
+  updateCommitment(id: number, data: Partial<Commitment>): Commitment | undefined {
+    const existing = this.commitments.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...data, id };
+    if ((data.status === "Executed") && existing.status !== "Executed" && !data.executedDate) {
+      updated.executedDate = today();
+    }
+    this.commitments.set(id, updated);
+    return updated;
+  }
+
+  deleteCommitment(id: number): boolean {
+    for (const line of this.list(this.commitmentLineItems)) {
+      if (line.commitmentId === id) this.commitmentLineItems.delete(line.id);
+    }
+    return this.commitments.delete(id);
+  }
+
+  getCommitmentLineItems(commitmentId?: number): CommitmentLineItem[] {
+    const all = this.list(this.commitmentLineItems);
+    return commitmentId === undefined ? all : all.filter(l => l.commitmentId === commitmentId);
+  }
+
+  createCommitmentLineItem(data: InsertCommitmentLineItem): CommitmentLineItem {
+    const id = this.nextId.commitmentLine++;
+    const line: CommitmentLineItem = { ...data, id };
+    this.commitmentLineItems.set(id, line);
+    return line;
+  }
+
+  updateCommitmentLineItem(id: number, data: Partial<CommitmentLineItem>): CommitmentLineItem | undefined {
+    const existing = this.commitmentLineItems.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...data, id };
+    this.commitmentLineItems.set(id, updated);
+    return updated;
+  }
+
+  deleteCommitmentLineItem(id: number): boolean { return this.commitmentLineItems.delete(id); }
+
+  // ----- Owner invoices (G702/G703 payment applications) -----
+
+  getOwnerInvoices(): OwnerInvoice[] {
+    return this.list(this.ownerInvoices).sort((a, b) => a.id - b.id);
+  }
+
+  getOwnerInvoice(id: number): OwnerInvoice | undefined { return this.ownerInvoices.get(id); }
+
+  /** Creates a pay app with one line per SOV item, zeroed out for entry. */
+  createOwnerInvoice(data: InsertOwnerInvoice): OwnerInvoice {
+    const id = this.nextId.invoice++;
+    const invoice: OwnerInvoice = {
+      ...data,
+      number: data.number ?? this.nextNumber("INV", this.ownerInvoices.size),
+      id,
+      createdAt: now(),
+    };
+    this.ownerInvoices.set(id, invoice);
+    for (const sovItem of this.getSovLineItems()) {
+      this.createInvoiceLineItem({
+        invoiceId: id, sovLineItemId: sovItem.id, workThisPeriod: 0, storedMaterials: 0,
+      });
+    }
+    return invoice;
+  }
+
+  updateOwnerInvoice(id: number, data: Partial<OwnerInvoice>): OwnerInvoice | undefined {
+    const existing = this.ownerInvoices.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...data, id };
+    this.ownerInvoices.set(id, updated);
+    return updated;
+  }
+
+  deleteOwnerInvoice(id: number): boolean {
+    for (const line of this.list(this.invoiceLineItems)) {
+      if (line.invoiceId === id) this.invoiceLineItems.delete(line.id);
+    }
+    return this.ownerInvoices.delete(id);
+  }
+
+  getInvoiceLineItems(invoiceId: number): InvoiceLineItem[] {
+    return this.list(this.invoiceLineItems).filter(l => l.invoiceId === invoiceId);
+  }
+
+  createInvoiceLineItem(data: InsertInvoiceLineItem): InvoiceLineItem {
+    const id = this.nextId.invoiceLine++;
+    const line: InvoiceLineItem = { ...data, id };
+    this.invoiceLineItems.set(id, line);
+    return line;
+  }
+
+  updateInvoiceLineItem(id: number, data: Partial<InvoiceLineItem>): InvoiceLineItem | undefined {
+    const existing = this.invoiceLineItems.get(id);
+    if (!existing) return undefined;
+    const updated = { ...existing, ...data, id };
+    this.invoiceLineItems.set(id, updated);
+    return updated;
+  }
+
+  /** Computes the G702 application summary and G703 continuation sheet. */
+  getG702Summary(invoiceId: number): G702Summary | undefined {
+    const invoice = this.ownerInvoices.get(invoiceId);
+    if (!invoice) return undefined;
+    const retainagePercent = this.primeContract.retainagePercent;
+
+    // prior = earlier applications, by creation order
+    const priorInvoiceIds = new Set(
+      this.getOwnerInvoices().filter(inv => inv.id < invoiceId).map(inv => inv.id),
+    );
+    const priorBySov = new Map<number, number>();
+    Array.from(this.invoiceLineItems.values()).forEach(line => {
+      if (!priorInvoiceIds.has(line.invoiceId)) return;
+      priorBySov.set(
+        line.sovLineItemId,
+        (priorBySov.get(line.sovLineItemId) ?? 0) + line.workThisPeriod + line.storedMaterials,
+      );
+    });
+
+    const lines = this.getInvoiceLineItems(invoiceId);
+    const rows: G703Row[] = [];
+    for (const line of lines) {
+      const sovItem = this.sovLineItems.get(line.sovLineItemId);
+      if (!sovItem) continue;
+      const previousCompleted = priorBySov.get(line.sovLineItemId) ?? 0;
+      const totalCompletedAndStored = previousCompleted + line.workThisPeriod + line.storedMaterials;
+      rows.push({
+        lineItemId: line.id,
+        sovLineItemId: sovItem.id,
+        itemNumber: sovItem.itemNumber,
+        costCode: sovItem.costCode,
+        description: sovItem.description,
+        scheduledValue: sovItem.scheduledValue,
+        previousCompleted,
+        workThisPeriod: line.workThisPeriod,
+        storedMaterials: line.storedMaterials,
+        totalCompletedAndStored,
+        percentComplete: sovItem.scheduledValue > 0
+          ? (totalCompletedAndStored / sovItem.scheduledValue) * 100 : 0,
+        balanceToFinish: sovItem.scheduledValue - totalCompletedAndStored,
+        retainage: totalCompletedAndStored * (retainagePercent / 100),
+      });
+    }
+
+    const originalContractSum = this.getSovLineItems()
+      .reduce((acc, item) => acc + item.scheduledValue, 0);
+    const netChangeOrders = this.getContractFinancials().approvedChangeOrders;
+    const contractSumToDate = originalContractSum + netChangeOrders;
+    const totalCompletedAndStored = rows.reduce((acc, r) => acc + r.totalCompletedAndStored, 0);
+    const totalRetainage = totalCompletedAndStored * (retainagePercent / 100);
+    const totalEarnedLessRetainage = totalCompletedAndStored - totalRetainage;
+    const previousCompletedTotal = rows.reduce((acc, r) => acc + r.previousCompleted, 0);
+    const previousCertificates =
+      previousCompletedTotal - previousCompletedTotal * (retainagePercent / 100);
+
+    return {
+      invoice,
+      rows,
+      originalContractSum,
+      netChangeOrders,
+      contractSumToDate,
+      totalCompletedAndStored,
+      retainagePercent,
+      totalRetainage,
+      totalEarnedLessRetainage,
+      previousCertificates,
+      currentPaymentDue: totalEarnedLessRetainage - previousCertificates,
+      balanceToFinishIncludingRetainage: contractSumToDate - totalEarnedLessRetainage,
+    };
+  }
+
+  // ----- Overdue scanning (feeds the notification reminders) -----
+
+  findOverdueItems(): Array<{
+    entityType: string; entityId: number; title: string;
+    assigneeName: string; dueDate: string;
+  }> {
+    const cutoff = today();
+    const overdue: Array<{
+      entityType: string; entityId: number; title: string;
+      assigneeName: string; dueDate: string;
+    }> = [];
+
+    for (const rfi of this.getRfis()) {
+      if (rfi.status === "Open" && rfi.dueDate && rfi.dueDate < cutoff) {
+        overdue.push({
+          entityType: "rfi", entityId: rfi.id,
+          title: `RFI ${rfi.number} is overdue (due ${rfi.dueDate})`,
+          assigneeName: rfi.assignedTo || rfi.ballInCourt, dueDate: rfi.dueDate,
+        });
+      }
+    }
+    for (const item of this.getPunchItems()) {
+      if ((item.status === "Open" || item.status === "Ready for Review") &&
+          item.dueDate && item.dueDate < cutoff) {
+        overdue.push({
+          entityType: "punchItem", entityId: item.id,
+          title: `Punch item #${item.number} is overdue (due ${item.dueDate})`,
+          assigneeName: item.assignee || item.ballInCourt, dueDate: item.dueDate,
+        });
+      }
+    }
+    for (const step of this.list(this.submittalSteps)) {
+      if (step.status === "Pending" && step.dueDate && step.dueDate < cutoff) {
+        const submittal = this.submittals.get(step.submittalId);
+        overdue.push({
+          entityType: "submittal", entityId: step.submittalId,
+          title: `Submittal ${submittal?.number ?? step.submittalId} review is overdue (due ${step.dueDate})`,
+          assigneeName: step.approverName, dueDate: step.dueDate,
+        });
+      }
+    }
+    return overdue;
   }
 
   // ----- Seed data -----
@@ -726,19 +1280,92 @@ export class ProcoreStorage {
       // costCode, description, original, mods, committed, direct, pending
       ["01-000", "General Conditions", 1850000, 0, 1850000, 412000, 0],
       ["02-000", "Sitework & Utilities", 2400000, 25000, 2380000, 1620000, 0],
-      ["03-000", "Concrete", 3150000, 0, 3164200, 1890000, 0],
-      ["05-000", "Structural & Misc. Steel", 4275000, 0, 4275000, 2310000, 0],
+      // committed costs for 03/05/08/23 come from seeded commitments below
+      ["03-000", "Concrete", 3150000, 0, 0, 1890000, 0],
+      ["05-000", "Structural & Misc. Steel", 4275000, 0, 0, 2310000, 0],
       ["07-000", "Thermal & Moisture Protection", 1125000, 0, 1098000, 86000, 0],
-      ["08-000", "Openings & Glazing", 2650000, 0, 2588000, 0, 35000],
+      ["08-000", "Openings & Glazing", 2650000, 0, 0, 0, 35000],
       ["09-000", "Finishes", 3475000, 0, 3402000, 0, 22000],
       ["21-000", "Fire Suppression", 890000, 0, 874000, 121000, 0],
       ["22-000", "Plumbing", 1675000, 0, 1675000, 410000, 0],
-      ["23-000", "HVAC", 3825000, 0, 3825000, 655000, 18750],
+      ["23-000", "HVAC", 3825000, 0, 0, 655000, 18750],
       ["26-000", "Electrical", 3360000, 0, 3344000, 588000, 15500],
       ["31-000", "Earthwork", 1325000, -15000, 1329300, 1190000, 0],
     ];
     budget.forEach(([costCode, description, originalBudget, budgetModifications, committedCosts, directCosts, pendingBudgetChanges]) =>
       this.createBudgetLineItem({ costCode, description, originalBudget, budgetModifications, committedCosts, directCosts, pendingBudgetChanges }));
+
+    // Project directory (all seed accounts use password "password123")
+    const seedUsers: Array<[string, string, User["role"], string, string]> = [
+      ["Sam Patel", "spatel@summitbuilders.com", "Admin", "Summit Builders Inc.", "Project Executive"],
+      ["Jordan Lee", "jlee@summitbuilders.com", "Project Manager", "Summit Builders Inc.", "Project Manager"],
+      ["Dana Brooks", "dbrooks@summitbuilders.com", "Superintendent", "Summit Builders Inc.", "Superintendent"],
+      ["Devon Whitfield", "dwhitfield@hartmancole.com", "Architect", "Hartman + Cole Architects", "Project Architect"],
+      ["Rosa Alvarez", "ralvarez@riversidehealth.com", "Owner Rep", "Riverside Health Partners LLC", "Owner's Representative"],
+      ["Tunde Okafor", "tokafor@metrohvac.com", "Subcontractor", "Metro HVAC", "Project Manager"],
+    ];
+    const passwordHash = hashPassword("password123");
+    seedUsers.forEach(([name, email, role, company, title]) =>
+      this.createUser({ name, email, role, company, title, phone: "", passwordHash }));
+
+    // Commitments — these drive the committed-cost column for their trades
+    const commitmentSeed: Array<{
+      title: string; type: Commitment["commitmentType"]; vendor: string;
+      status: Commitment["status"]; lines: Array<[string, string, number]>;
+    }> = [
+      {
+        title: "Structural Steel Subcontract", type: "Subcontract", vendor: "Apex Steel Fabricators",
+        status: "Executed", lines: [["05-000", "Furnish & erect structural and misc. steel", 4275000]],
+      },
+      {
+        title: "Cast-in-Place Concrete Subcontract", type: "Subcontract", vendor: "City Concrete",
+        status: "Executed",
+        lines: [
+          ["03-000", "Foundations, SOG, and elevated decks", 3150000],
+          ["03-000", "CCO 01 - Stepped footing F-12", 14200],
+        ],
+      },
+      {
+        title: "HVAC Subcontract", type: "Subcontract", vendor: "Metro HVAC",
+        status: "Executed", lines: [["23-000", "Complete HVAC system per plans and specs", 3825000]],
+      },
+      {
+        title: "Curtain Wall Material Purchase", type: "Purchase Order", vendor: "ClearView Glazing",
+        status: "Executed", lines: [["08-000", "Curtain wall framing and glazing units", 2588000]],
+      },
+      {
+        title: "Lobby Stone Flooring Subcontract", type: "Subcontract", vendor: "Granite & Co. Interiors",
+        status: "Out for Signature", lines: [["09-000", "Furnish & install lobby stone flooring", 412000]],
+      },
+    ];
+    for (const seed of commitmentSeed) {
+      const commitment = this.createCommitment({
+        title: seed.title, commitmentType: seed.type, vendor: seed.vendor,
+        status: seed.status, retainagePercent: 10, description: "",
+        executedDate: seed.status === "Executed" ? daysFromToday(-60) : null,
+      });
+      seed.lines.forEach(([costCode, description, amount]) =>
+        this.createCommitmentLineItem({ commitmentId: commitment.id, costCode, description, amount }));
+    }
+
+    // Approval workflow for the submittal that is pending review (SUB-003)
+    const pendingSubmittal = this.getSubmittals().find(s => s.status === "Pending Approval");
+    if (pendingSubmittal) {
+      const architect = this.findUserByName("Devon Whitfield");
+      const pm = this.findUserByName("Jordan Lee");
+      this.createSubmittalStep({
+        submittalId: pendingSubmittal.id, stepNumber: 1,
+        approverName: pm?.name ?? "Jordan Lee", approverUserId: pm?.id ?? null,
+        dueDate: daysFromToday(2), status: "Approved",
+        comments: "GC review complete; forwarded to design team.", respondedAt: now(),
+      });
+      this.createSubmittalStep({
+        submittalId: pendingSubmittal.id, stepNumber: 2,
+        approverName: architect?.name ?? "Devon Whitfield", approverUserId: architect?.id ?? null,
+        dueDate: daysFromToday(9), status: "Pending", comments: "", respondedAt: null,
+      });
+      this.updateSubmittal(pendingSubmittal.id, { ballInCourt: architect?.name ?? "Devon Whitfield" });
+    }
   }
 }
 

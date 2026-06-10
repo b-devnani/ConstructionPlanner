@@ -7,6 +7,8 @@ import {
   PageHeader, StatusBadge, SearchInput, StatusFilter, EmptyState,
   TextField, SelectField, DateField, TextAreaField,
 } from "@/components/procore/shared";
+import { AttachmentsSection } from "@/components/procore/AttachmentsSection";
+import { UserSelect } from "@/components/procore/UserSelect";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -144,10 +146,13 @@ export default function PunchListPage() {
             <SelectField label="Priority" value={form.priority ?? "Medium"} onChange={set("priority")} options={PUNCH_PRIORITIES} />
             <TextField label="Location" value={form.location ?? ""} onChange={set("location")} />
             <TextField label="Trade" value={form.trade ?? ""} onChange={set("trade")} />
-            <TextField label="Assignee" value={form.assignee ?? ""} onChange={set("assignee")} />
-            <TextField label="Ball in Court" value={form.ballInCourt ?? ""} onChange={set("ballInCourt")} />
+            <UserSelect label="Assignee" value={form.assignee ?? ""} onChange={set("assignee")} />
+            <UserSelect label="Ball in Court" value={form.ballInCourt ?? ""} onChange={set("ballInCourt")} />
             <DateField label="Due Date" value={form.dueDate ?? null} onChange={set("dueDate")} />
           </div>
+          {editing && (
+            <AttachmentsSection entityType="punchItem" entityId={editing.id} title="Photos & Files" />
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button onClick={save} disabled={!form.title.trim() || create.isPending || update.isPending}>

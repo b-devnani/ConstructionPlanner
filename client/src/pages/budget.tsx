@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, Download } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 
 const emptyForm: InsertBudgetLineItem = {
@@ -70,10 +70,14 @@ export default function BudgetPage() {
     <div>
       <PageHeader
         title="Budget"
-        subtitle="Project financial roll-up by cost code"
+        subtitle="Project financial roll-up by cost code — committed costs include executed commitments"
         onCreate={openCreate}
         createLabel="Add Budget Line"
-      />
+      >
+        <Button variant="outline" onClick={() => window.open("/api/budget/export.csv", "_blank")}>
+          <Download className="h-4 w-4 mr-1" /> Export CSV
+        </Button>
+      </PageHeader>
 
       {totals && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

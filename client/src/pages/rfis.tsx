@@ -7,6 +7,8 @@ import {
   PageHeader, StatusBadge, SearchInput, StatusFilter, EmptyState, DetailRow,
   TextField, SelectField, DateField, NumberField, TextAreaField,
 } from "@/components/procore/shared";
+import { AttachmentsSection } from "@/components/procore/AttachmentsSection";
+import { UserSelect } from "@/components/procore/UserSelect";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -180,6 +182,7 @@ export default function RfisPage() {
                   {viewing.question || "No question provided."}
                 </div>
               </div>
+              <AttachmentsSection entityType="rfi" entityId={viewing.id} />
               <div className="space-y-1.5">
                 <div className="text-sm font-semibold">Official Response</div>
                 {viewing.status === "Closed" ? (
@@ -223,8 +226,8 @@ export default function RfisPage() {
             <TextAreaField className="col-span-2" label="Question" value={form.question ?? ""} onChange={set("question")} rows={4} />
             <SelectField label="Status" value={form.status ?? "Draft"} onChange={set("status")} options={RFI_STATUSES} />
             <SelectField label="Priority" value={form.priority ?? "Medium"} onChange={set("priority")} options={RFI_PRIORITIES} />
-            <TextField label="Assigned To" value={form.assignedTo ?? ""} onChange={set("assignedTo")} />
-            <TextField label="RFI Manager" value={form.rfiManager ?? ""} onChange={set("rfiManager")} />
+            <UserSelect label="Assigned To" value={form.assignedTo ?? ""} onChange={set("assignedTo")} />
+            <UserSelect label="RFI Manager" value={form.rfiManager ?? ""} onChange={set("rfiManager")} />
             <TextField label="Received From" value={form.receivedFrom ?? ""} onChange={set("receivedFrom")} />
             <TextField label="Responsible Contractor" value={form.responsibleContractor ?? ""} onChange={set("responsibleContractor")} />
             <TextField label="Spec Section" value={form.specSection ?? ""} onChange={set("specSection")} />

@@ -410,3 +410,260 @@ export interface ContractFinancials {
   revisedContractValue: number;
   pendingRevisedContractValue: number;
 }
+
+// ===========================================================================
+// Users & permissions
+// ===========================================================================
+
+export const USER_ROLES = [
+  "Admin",
+  "Project Manager",
+  "Superintendent",
+  "Architect",
+  "Owner Rep",
+  "Subcontractor",
+] as const;
+
+export type UserRole = (typeof USER_ROLES)[number];
+
+/** Roles allowed to mutate financial tools (contract, budget, COs, commitments, invoices). */
+export const FINANCIAL_ROLES: readonly UserRole[] = ["Admin", "Project Manager"];
+
+export const userSchema = z.object({
+  id: z.number(),
+  name: z.string().min(1),
+  email: z.string().email(),
+  role: z.enum(USER_ROLES).default("Subcontractor"),
+  company: z.string().default(""),
+  title: z.string().default(""),
+  phone: z.string().default(""),
+  // scrypt hash, never sent to the client
+  passwordHash: z.string().default(""),
+  createdAt: z.string(),
+});
+
+export const insertUserSchema = userSchema
+  .omit({ id: true, createdAt: true, passwordHash: true })
+  .extend({ password: z.string().min(6) });
+
+export type User = z.infer<typeof userSchema>;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type SafeUser = Omit<User, "passwordHash">;
+
+// ===========================================================================
+// Attachments (file uploads stored on disk, metadata persisted)
+// ===========================================================================
+
+export const ATTACHMENT_ENTITY_TYPES = [
+  "submittal",
+  "rfi",
+  "drawing",
+  "specSection",
+  "punchItem",
+  "dailyLog",
+  "changeOrder",
+  "commitment",
+] as const;
+
+export const attachmentSchema = z.object({
+  id: z.number(),
+  entityType: z.enum(ATTACHMENT_ENTITY_TYPES),
+  entityId: z.number(),
+  filename: z.string(),
+  mimeType: z.string(),
+  size: z.number(),
+  storagePath: z.string(),
+  uploadedBy: z.string().default(""),
+  createdAt: z.string(),
+});
+
+export type Attachment = z.infer<typeof attachmentSchema>;
+
+// ===========================================================================
+// Submittal approval workflow
+// ===========================================================================
+
+export const STEP_STATUSES = [
+  "Pending",
+  "Approved",
+  "Approved as Noted",
+  "Revise and Resubmit",
+  "Rejected",
+] as const;
+
+export const submittalStepSchema = z.object({
+  id: z.number(),
+  submittalId: z.number(),
+  stepNumber: z.number().int().min(1),
+  approverName: z.string().min(1),
+  approverUserId: z.number().nullable().default(null),
+  dueDate: z.string().nullable().default(null),
+  status: z.enum(STEP_STATUSES).default("Pending"),
+  comments: z.string().default(""),
+  respondedAt: z.string().nullable().default(null),
+});
+
+export const insertSubmittalStepSchema = submittalStepSchema.omit({ id: true });
+export const respondSubmittalStepSchema = z.object({
+  status: z.enum(STEP_STATUSES).refine(s => s !== "Pending", "Pick a response"),
+  comments: z.string().default(""),
+});
+
+export type SubmittalStep = z.infer<typeof submittalStepSchema>;
+export type InsertSubmittalStep = z.infer<typeof insertSubmittalStepSchema>;
+
+// ===========================================================================
+// Notifications (in-app; email is mirrored to an outbox file)
+// ===========================================================================
+
+export const notificationSchema = z.object({
+  id: z.number(),
+  userId: z.number(),
+  title: z.string(),
+  body: z.string().default(""),
+  entityType: z.string().default(""),
+  entityId: z.number().nullable().default(null),
+  read: z.boolean().default(false),
+  createdAt: z.string(),
+});
+
+export type Notification = z.infer<typeof notificationSchema>;
+
+// ===========================================================================
+// Drawing markups (pins linking plan locations to RFIs / punch items)
+// ===========================================================================
+
+export const PIN_LINK_TYPES = ["rfi", "punchItem", "note"] as const;
+
+export const drawingPinSchema = z.object({
+  id: z.number(),
+  drawingId: z.number(),
+  // position as percentage of the rendered sheet (0-100)
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
+  linkType: z.enum(PIN_LINK_TYPES).default("note"),
+  linkedId: z.number().nullable().default(null),
+  note: z.string().default(""),
+  createdBy: z.string().default(""),
+  createdAt: z.string(),
+});
+
+export const insertDrawingPinSchema = drawingPinSchema.omit({ id: true, createdAt: true });
+
+export type DrawingPin = z.infer<typeof drawingPinSchema>;
+export type InsertDrawingPin = z.infer<typeof insertDrawingPinSchema>;
+
+// ===========================================================================
+// Commitments (subcontracts & purchase orders)
+// ===========================================================================
+
+export const COMMITMENT_TYPES = ["Subcontract", "Purchase Order"] as const;
+export const COMMITMENT_STATUSES = [
+  "Draft",
+  "Out for Signature",
+  "Executed",
+  "Complete",
+  "Terminated",
+] as const;
+
+export const commitmentSchema = z.object({
+  id: z.number(),
+  number: z.string(),
+  title: z.string().min(1),
+  commitmentType: z.enum(COMMITMENT_TYPES).default("Subcontract"),
+  status: z.enum(COMMITMENT_STATUSES).default("Draft"),
+  vendor: z.string().default(""),
+  executedDate: z.string().nullable().default(null),
+  retainagePercent: z.number().min(0).max(100).default(10),
+  description: z.string().default(""),
+  createdAt: z.string(),
+});
+
+export const insertCommitmentSchema = commitmentSchema
+  .omit({ id: true, createdAt: true, number: true })
+  .extend({ number: z.string().optional() });
+
+export type Commitment = z.infer<typeof commitmentSchema>;
+export type InsertCommitment = z.infer<typeof insertCommitmentSchema>;
+
+export const commitmentLineItemSchema = z.object({
+  id: z.number(),
+  commitmentId: z.number(),
+  costCode: z.string().default(""),
+  description: z.string().min(1),
+  amount: z.number().default(0),
+});
+
+export const insertCommitmentLineItemSchema = commitmentLineItemSchema.omit({ id: true });
+
+export type CommitmentLineItem = z.infer<typeof commitmentLineItemSchema>;
+export type InsertCommitmentLineItem = z.infer<typeof insertCommitmentLineItemSchema>;
+
+// ===========================================================================
+// Owner invoices (payment applications, G702/G703 style)
+// ===========================================================================
+
+export const INVOICE_STATUSES = ["Draft", "Under Review", "Approved", "Paid"] as const;
+
+export const ownerInvoiceSchema = z.object({
+  id: z.number(),
+  number: z.string(),
+  periodStart: z.string().nullable().default(null),
+  periodEnd: z.string().min(1),
+  billingDate: z.string().min(1),
+  status: z.enum(INVOICE_STATUSES).default("Draft"),
+  createdAt: z.string(),
+});
+
+export const insertOwnerInvoiceSchema = ownerInvoiceSchema
+  .omit({ id: true, createdAt: true, number: true })
+  .extend({ number: z.string().optional() });
+
+export type OwnerInvoice = z.infer<typeof ownerInvoiceSchema>;
+export type InsertOwnerInvoice = z.infer<typeof insertOwnerInvoiceSchema>;
+
+export const invoiceLineItemSchema = z.object({
+  id: z.number(),
+  invoiceId: z.number(),
+  sovLineItemId: z.number(),
+  workThisPeriod: z.number().default(0),
+  storedMaterials: z.number().default(0),
+});
+
+export const insertInvoiceLineItemSchema = invoiceLineItemSchema.omit({ id: true });
+
+export type InvoiceLineItem = z.infer<typeof invoiceLineItemSchema>;
+export type InsertInvoiceLineItem = z.infer<typeof insertInvoiceLineItemSchema>;
+
+// Computed G703 continuation-sheet row for one SOV line on one invoice
+export interface G703Row {
+  lineItemId: number;
+  sovLineItemId: number;
+  itemNumber: string;
+  costCode: string;
+  description: string;
+  scheduledValue: number;
+  previousCompleted: number;
+  workThisPeriod: number;
+  storedMaterials: number;
+  totalCompletedAndStored: number;
+  percentComplete: number;
+  balanceToFinish: number;
+  retainage: number;
+}
+
+// Computed G702 application summary for one invoice
+export interface G702Summary {
+  invoice: OwnerInvoice;
+  rows: G703Row[];
+  originalContractSum: number;
+  netChangeOrders: number;
+  contractSumToDate: number;
+  totalCompletedAndStored: number;
+  retainagePercent: number;
+  totalRetainage: number;
+  totalEarnedLessRetainage: number;
+  previousCertificates: number;
+  currentPaymentDue: number;
+  balanceToFinishIncludingRetainage: number;
+}

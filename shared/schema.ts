@@ -1,6 +1,16 @@
-import { pgTable, text, serial, integer, date, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, date, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+// Document-style persistence for the Procore-style project management tools.
+// Each row holds one entity collection (e.g. "submittals") as a JSONB array;
+// the "meta" row holds id counters. See server/persistence.ts.
+export const appState = pgTable("app_state", {
+  key: text("key").primaryKey(),
+  data: jsonb("data").notNull(),
+  updated_at: timestamp("updated_at").defaultNow(),
+});
+
 
 // Location schema
 export const locations = pgTable("locations", {

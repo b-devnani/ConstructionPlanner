@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { useCrud } from "@/hooks/use-crud";
 import {
   Drawing, InsertDrawing, DRAWING_DISCIPLINES, DRAWING_STATUSES,
@@ -24,6 +25,7 @@ const emptyForm: InsertDrawing = {
 };
 
 export default function DrawingsPage() {
+  const [, navigate] = useLocation();
   const { query, create, update, remove } = useCrud<Drawing, InsertDrawing>("drawings");
   const [search, setSearch] = useState("");
   const [disciplineFilter, setDisciplineFilter] = useState("all");
@@ -115,15 +117,17 @@ export default function DrawingsPage() {
                 </TableHeader>
                 <TableBody>
                   {items.map(d => (
-                    <TableRow key={d.id} className={d.status === "Superseded" ? "opacity-60" : ""}>
-                      <TableCell className="font-medium">{d.number}</TableCell>
+                    <TableRow key={d.id}
+                      className={`cursor-pointer ${d.status === "Superseded" ? "opacity-60" : ""}`}
+                      onClick={() => navigate(`/drawings/${d.id}`)}>
+                      <TableCell className="font-medium text-primary">{d.number}</TableCell>
                       <TableCell>{d.title}</TableCell>
                       <TableCell>{d.revision}</TableCell>
                       <TableCell>{d.drawingSet || "—"}</TableCell>
                       <TableCell>{formatDate(d.drawingDate)}</TableCell>
                       <TableCell>{formatDate(d.receivedDate)}</TableCell>
                       <TableCell><StatusBadge status={d.status} /></TableCell>
-                      <TableCell>
+                      <TableCell onClick={e => e.stopPropagation()}>
                         <div className="flex gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(d)}>
                             <Pencil className="h-4 w-4" />
