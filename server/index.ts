@@ -2,7 +2,9 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupAuth } from "./auth";
-import { procoreStorage } from "./procore-storage";
+import { ensureSchema, closeDb } from "./db";
+import { seedIfEmpty } from "./seed";
+import { initEmail } from "./email";
 
 const app = express();
 app.use(express.json());
@@ -39,9 +41,13 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Load persisted data (PostgreSQL when DATABASE_URL is set, JSON file
-  // otherwise) or seed demo data on first boot.
-  await procoreStorage.init();
+  // Bring up DB schema, optional demo seed, and email transport before
+  // accepting requests. All three are safe to run concurrently from multiple
+  // instances: ensureSchema is CREATE IF NOT EXISTS, seedIfEmpty short-circuits
+  // when users already exist, and email init only touches local state.
+  await ensureSchema();
+  await seedIfEmpty();
+  await initEmail();
 
   // Sessions + login must be registered before any /api routes
   setupAuth(app);
@@ -52,8 +58,10 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    if (!res.headersSent) {
+      res.status(status).json({ message });
+    }
+    console.error(err);
   });
 
   // importantly only setup vite in development and after
@@ -65,13 +73,20 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Use port 5000 for workflow compatibility
-  const port = 5000;
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
+  const port = Number(process.env.PORT ?? 5000);
+  // No reusePort — each instance binds an exclusive port. Shared state lives
+  // in PostgreSQL, so running multiple instances behind a load balancer is
+  // safe; just give each its own port.
+  server.listen({ port, host: "0.0.0.0" }, () => {
     log(`serving on port ${port}`);
   });
+
+  const shutdown = async () => {
+    log("shutting down");
+    server.close();
+    await closeDb();
+    process.exit(0);
+  };
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 })();

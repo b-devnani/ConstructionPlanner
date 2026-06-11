@@ -34,11 +34,11 @@ import {
 } from "@shared/procore";
 
 interface ResourceHandlers<T, I> {
-  list: () => T[];
-  get?: (id: number) => T | undefined;
-  create: (data: I) => T;
-  update: (id: number, data: Partial<T>) => T | undefined;
-  remove: (id: number) => boolean;
+  list: () => Promise<T[]>;
+  get?: (id: number) => Promise<T | undefined>;
+  create: (data: I) => Promise<T>;
+  update: (id: number, data: Partial<T>) => Promise<T | undefined>;
+  remove: (id: number) => Promise<boolean>;
 }
 
 function parseId(req: Request, res: Response): number | undefined {
@@ -54,6 +54,7 @@ function handleError(res: Response, error: unknown, action: string) {
   if (error instanceof z.ZodError) {
     return res.status(400).json({ message: `Invalid data for ${action}`, errors: error.errors });
   }
+  console.error(`[api] failed to ${action}:`, error);
   return res.status(500).json({ message: `Failed to ${action}` });
 }
 
@@ -70,33 +71,43 @@ function registerResource<T, I>(
   handlers: ResourceHandlers<T, I>,
   guard: RequestHandler = passthrough,
 ) {
-  app.get(`/api/${path}`, (_req, res) => res.json(handlers.list()));
+  app.get(`/api/${path}`, async (_req, res) => {
+    try {
+      res.json(await handlers.list());
+    } catch (error) {
+      handleError(res, error, `list ${path}`);
+    }
+  });
 
   if (handlers.get) {
-    app.get(`/api/${path}/:id`, (req, res) => {
+    app.get(`/api/${path}/:id`, async (req, res) => {
       const id = parseId(req, res);
       if (id === undefined) return;
-      const item = handlers.get!(id);
-      if (!item) return res.status(404).json({ message: "Not found" });
-      return res.json(item);
+      try {
+        const item = await handlers.get!(id);
+        if (!item) return res.status(404).json({ message: "Not found" });
+        return res.json(item);
+      } catch (error) {
+        return handleError(res, error, `get ${path}`);
+      }
     });
   }
 
-  app.post(`/api/${path}`, guard, (req, res) => {
+  app.post(`/api/${path}`, guard, async (req, res) => {
     try {
       const data = insertSchema.parse(req.body);
-      return res.status(201).json(handlers.create(data));
+      return res.status(201).json(await handlers.create(data));
     } catch (error) {
       return handleError(res, error, `create ${path}`);
     }
   });
 
-  app.put(`/api/${path}/:id`, guard, (req, res) => {
+  app.put(`/api/${path}/:id`, guard, async (req, res) => {
     const id = parseId(req, res);
     if (id === undefined) return;
     try {
       const data = (insertSchema as unknown as z.AnyZodObject).partial().parse(req.body) as Partial<T>;
-      const updated = handlers.update(id, data);
+      const updated = await handlers.update(id, data);
       if (!updated) return res.status(404).json({ message: "Not found" });
       return res.json(updated);
     } catch (error) {
@@ -104,11 +115,15 @@ function registerResource<T, I>(
     }
   });
 
-  app.delete(`/api/${path}/:id`, guard, (req, res) => {
+  app.delete(`/api/${path}/:id`, guard, async (req, res) => {
     const id = parseId(req, res);
     if (id === undefined) return;
-    if (!handlers.remove(id)) return res.status(404).json({ message: "Not found" });
-    return res.json({ success: true });
+    try {
+      if (!(await handlers.remove(id))) return res.status(404).json({ message: "Not found" });
+      return res.json({ success: true });
+    } catch (error) {
+      return handleError(res, error, `delete ${path}`);
+    }
   });
 }
 
@@ -150,8 +165,8 @@ export function registerProcoreRoutes(app: Express): void {
   });
 
   // Daily logs (plus by-date lookup and nested manpower entries)
-  app.get("/api/daily-logs/by-date/:date", (req, res) => {
-    const log = store.getDailyLogByDate(req.params.date);
+  app.get("/api/daily-logs/by-date/:date", async (req, res) => {
+    const log = await store.getDailyLogByDate(req.params.date);
     if (!log) return res.status(404).json({ message: "No log for this date" });
     return res.json(log);
   });
@@ -164,14 +179,14 @@ export function registerProcoreRoutes(app: Express): void {
     remove: id => store.deleteDailyLog(id),
   });
 
-  app.get("/api/daily-logs/:id/manpower", (req, res) => {
+  app.get("/api/daily-logs/:id/manpower", async (req, res) => {
     const id = parseId(req, res);
     if (id === undefined) return;
-    return res.json(store.getManpowerEntries(id));
+    return res.json(await store.getManpowerEntries(id));
   });
 
   registerResource(app, "manpower", insertManpowerEntrySchema, {
-    list: () => [],
+    list: async () => [],
     create: data => store.createManpowerEntry(data),
     update: (id, data) => store.updateManpowerEntry(id, data),
     remove: id => store.deleteManpowerEntry(id),
@@ -186,20 +201,20 @@ export function registerProcoreRoutes(app: Express): void {
     remove: id => store.deletePunchItem(id),
   });
 
-  // Prime contract (singleton) and schedule of values
-  app.get("/api/prime-contract", (_req, res) => res.json(store.getPrimeContract()));
+  // Prime contract (singleton)
+  app.get("/api/prime-contract", async (_req, res) => res.json(await store.getPrimeContract()));
 
-  app.put("/api/prime-contract", requireFinancialRole, (req, res) => {
+  app.put("/api/prime-contract", requireFinancialRole, async (req, res) => {
     try {
       const data = updatePrimeContractSchema.parse(req.body);
-      return res.json(store.updatePrimeContract(data));
+      return res.json(await store.updatePrimeContract(data));
     } catch (error) {
       return handleError(res, error, "update prime contract");
     }
   });
 
-  app.get("/api/prime-contract/financials", (_req, res) =>
-    res.json(store.getContractFinancials()));
+  app.get("/api/prime-contract/financials", async (_req, res) =>
+    res.json(await store.getContractFinancials()));
 
   registerResource(app, "sov-line-items", insertSovLineItemSchema, {
     list: () => store.getSovLineItems(),
@@ -217,9 +232,9 @@ export function registerProcoreRoutes(app: Express): void {
     remove: id => store.deleteChangeEvent(id),
   });
 
-  app.get("/api/change-event-line-items", (req, res) => {
+  app.get("/api/change-event-line-items", async (req, res) => {
     const eventId = req.query.changeEventId ? parseInt(String(req.query.changeEventId)) : undefined;
-    return res.json(store.getChangeEventLineItems(eventId));
+    return res.json(await store.getChangeEventLineItems(eventId));
   });
 
   registerResource(app, "change-event-lines", insertChangeEventLineItemSchema, {
@@ -238,9 +253,9 @@ export function registerProcoreRoutes(app: Express): void {
     remove: id => store.deleteChangeOrder(id),
   }, requireFinancialRole);
 
-  app.get("/api/change-order-line-items", (req, res) => {
+  app.get("/api/change-order-line-items", async (req, res) => {
     const orderId = req.query.changeOrderId ? parseInt(String(req.query.changeOrderId)) : undefined;
-    return res.json(store.getChangeOrderLineItems(orderId));
+    return res.json(await store.getChangeOrderLineItems(orderId));
   });
 
   registerResource(app, "change-order-lines", insertChangeOrderLineItemSchema, {
@@ -251,11 +266,10 @@ export function registerProcoreRoutes(app: Express): void {
   }, requireFinancialRole);
 
   // Budget
-  app.get("/api/budget", (_req, res) => res.json(store.getBudgetSummary()));
+  app.get("/api/budget", async (_req, res) => res.json(await store.getBudgetSummary()));
 
-  // CSV export of the budget roll-up (ERP-friendly)
-  app.get("/api/budget/export.csv", (_req, res) => {
-    const { rows, totals } = store.getBudgetSummary();
+  app.get("/api/budget/export.csv", async (_req, res) => {
+    const { rows, totals } = await store.getBudgetSummary();
     const header = "Cost Code,Description,Original Budget,Budget Modifications,Approved COs,Revised Budget,Committed Costs,Direct Costs,Pending Changes,Projected Costs,Projected Over/Under";
     const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
     const lines = rows.map(r =>
@@ -277,32 +291,32 @@ export function registerProcoreRoutes(app: Express): void {
     remove: id => store.deleteBudgetLineItem(id),
   }, requireFinancialRole);
 
-  // ----- Users & directory -----
+  // Users & directory
   registerUserRoutes(app);
 
-  // ----- Notifications -----
-  app.get("/api/notifications", (req, res) => {
-    const user = currentUser(req);
+  // Notifications
+  app.get("/api/notifications", async (req, res) => {
+    const user = await currentUser(req);
     if (!user) return res.status(401).json({ message: "Not logged in" });
-    return res.json(store.getNotifications(user.id));
+    return res.json(await store.getNotifications(user.id));
   });
 
-  app.put("/api/notifications/:id/read", (req, res) => {
+  app.put("/api/notifications/:id/read", async (req, res) => {
     const id = parseId(req, res);
     if (id === undefined) return;
-    const updated = store.markNotificationRead(id);
+    const updated = await store.markNotificationRead(id);
     if (!updated) return res.status(404).json({ message: "Not found" });
     return res.json(updated);
   });
 
-  app.post("/api/notifications/read-all", (req, res) => {
-    const user = currentUser(req);
+  app.post("/api/notifications/read-all", async (req, res) => {
+    const user = await currentUser(req);
     if (!user) return res.status(401).json({ message: "Not logged in" });
-    store.markAllNotificationsRead(user.id);
+    await store.markAllNotificationsRead(user.id);
     return res.json({ success: true });
   });
 
-  // ----- Attachments (file uploads) -----
+  // Attachments (file uploads)
   const uploadsDir = path.resolve(process.cwd(), "uploads");
   fs.mkdirSync(uploadsDir, { recursive: true });
   const upload = multer({
@@ -316,16 +330,16 @@ export function registerProcoreRoutes(app: Express): void {
     limits: { fileSize: 50 * 1024 * 1024 },
   });
 
-  app.get("/api/attachments", (req, res) => {
+  app.get("/api/attachments", async (req, res) => {
     const entityType = String(req.query.entityType ?? "");
     const entityId = parseInt(String(req.query.entityId ?? ""));
     if (!ATTACHMENT_ENTITY_TYPES.includes(entityType as any) || isNaN(entityId)) {
       return res.status(400).json({ message: "entityType and entityId are required" });
     }
-    return res.json(store.getAttachments(entityType, entityId));
+    return res.json(await store.getAttachments(entityType, entityId));
   });
 
-  app.post("/api/attachments", upload.single("file"), (req, res) => {
+  app.post("/api/attachments", upload.single("file"), async (req, res) => {
     const entityType = String(req.body.entityType ?? "");
     const entityId = parseInt(String(req.body.entityId ?? ""));
     if (!req.file) return res.status(400).json({ message: "A file is required" });
@@ -333,8 +347,8 @@ export function registerProcoreRoutes(app: Express): void {
       fs.unlink(req.file.path, () => {});
       return res.status(400).json({ message: "entityType and entityId are required" });
     }
-    const user = currentUser(req);
-    const attachment = store.createAttachment({
+    const user = await currentUser(req);
+    const attachment = await store.createAttachment({
       entityType: entityType as any,
       entityId,
       filename: req.file.originalname,
@@ -346,10 +360,10 @@ export function registerProcoreRoutes(app: Express): void {
     return res.status(201).json(attachment);
   });
 
-  app.get("/api/attachments/:id/file", (req, res) => {
+  app.get("/api/attachments/:id/file", async (req, res) => {
     const id = parseId(req, res);
     if (id === undefined) return;
-    const attachment = store.getAttachment(id);
+    const attachment = await store.getAttachment(id);
     if (!attachment) return res.status(404).json({ message: "Not found" });
     const filePath = path.join(uploadsDir, attachment.storagePath);
     if (!fs.existsSync(filePath)) return res.status(404).json({ message: "File missing on disk" });
@@ -358,30 +372,30 @@ export function registerProcoreRoutes(app: Express): void {
     return res.sendFile(filePath);
   });
 
-  app.delete("/api/attachments/:id", (req, res) => {
+  app.delete("/api/attachments/:id", async (req, res) => {
     const id = parseId(req, res);
     if (id === undefined) return;
-    const attachment = store.getAttachment(id);
+    const attachment = await store.getAttachment(id);
     if (!attachment) return res.status(404).json({ message: "Not found" });
-    store.deleteAttachment(id);
+    await store.deleteAttachment(id);
     fs.unlink(path.join(uploadsDir, attachment.storagePath), () => {});
     return res.json({ success: true });
   });
 
-  // ----- Submittal approval workflow -----
-  app.get("/api/submittals/:id/steps", (req, res) => {
+  // Submittal approval workflow
+  app.get("/api/submittals/:id/steps", async (req, res) => {
     const id = parseId(req, res);
     if (id === undefined) return;
-    return res.json(store.getSubmittalSteps(id));
+    return res.json(await store.getSubmittalSteps(id));
   });
 
-  app.post("/api/submittal-steps", (req, res) => {
+  app.post("/api/submittal-steps", async (req, res) => {
     try {
       const data = insertSubmittalStepSchema.parse(req.body);
-      const step = store.createSubmittalStep(data);
+      const step = await store.createSubmittalStep(data);
       if (step.status === "Pending") {
-        const submittal = store.getSubmittal(step.submittalId);
-        notifyByName(
+        const submittal = await store.getSubmittal(step.submittalId);
+        await notifyByName(
           step.approverName,
           `Submittal ${submittal?.number ?? step.submittalId} awaits your review`,
           `You were added as approver (step ${step.stepNumber})${step.dueDate ? `, due ${step.dueDate}` : ""}.`,
@@ -394,31 +408,31 @@ export function registerProcoreRoutes(app: Express): void {
     }
   });
 
-  app.delete("/api/submittal-steps/:id", (req, res) => {
+  app.delete("/api/submittal-steps/:id", async (req, res) => {
     const id = parseId(req, res);
     if (id === undefined) return;
-    if (!store.deleteSubmittalStep(id)) return res.status(404).json({ message: "Not found" });
+    if (!(await store.deleteSubmittalStep(id))) return res.status(404).json({ message: "Not found" });
     return res.json({ success: true });
   });
 
-  app.post("/api/submittal-steps/:id/respond", (req, res) => {
+  app.post("/api/submittal-steps/:id/respond", async (req, res) => {
     const id = parseId(req, res);
     if (id === undefined) return;
     try {
       const { status, comments } = respondSubmittalStepSchema.parse(req.body);
-      const result = store.respondToSubmittalStep(id, status, comments);
+      const result = await store.respondToSubmittalStep(id, status, comments);
       if (!result) return res.status(404).json({ message: "Not found" });
       const { submittal } = result;
       if (submittal) {
         if (submittal.status === "Pending Approval") {
-          notifyByName(
+          await notifyByName(
             submittal.ballInCourt,
             `Submittal ${submittal.number} awaits your review`,
             `The previous step was marked "${status}". You are next in the approval workflow.`,
             "submittal", submittal.id,
           );
         } else {
-          notifyByName(
+          await notifyByName(
             submittal.responsibleContractor,
             `Submittal ${submittal.number} returned: ${submittal.status}`,
             comments || "Review complete.",
@@ -432,21 +446,21 @@ export function registerProcoreRoutes(app: Express): void {
     }
   });
 
-  // ----- Drawing pins (markups) -----
-  app.get("/api/drawings/:id/pins", (req, res) => {
+  // Drawing pins
+  app.get("/api/drawings/:id/pins", async (req, res) => {
     const id = parseId(req, res);
     if (id === undefined) return;
-    return res.json(store.getDrawingPins(id));
+    return res.json(await store.getDrawingPins(id));
   });
 
   registerResource(app, "drawing-pins", insertDrawingPinSchema, {
-    list: () => [],
+    list: async () => [],
     create: data => store.createDrawingPin(data),
     update: (id, data) => store.updateDrawingPin(id, data),
     remove: id => store.deleteDrawingPin(id),
   });
 
-  // ----- Commitments -----
+  // Commitments
   registerResource(app, "commitments", insertCommitmentSchema, {
     list: () => store.getCommitments(),
     get: id => store.getCommitment(id),
@@ -455,9 +469,9 @@ export function registerProcoreRoutes(app: Express): void {
     remove: id => store.deleteCommitment(id),
   }, requireFinancialRole);
 
-  app.get("/api/commitment-line-items", (req, res) => {
+  app.get("/api/commitment-line-items", async (req, res) => {
     const commitmentId = req.query.commitmentId ? parseInt(String(req.query.commitmentId)) : undefined;
-    return res.json(store.getCommitmentLineItems(commitmentId));
+    return res.json(await store.getCommitmentLineItems(commitmentId));
   });
 
   registerResource(app, "commitment-lines", insertCommitmentLineItemSchema, {
@@ -467,7 +481,7 @@ export function registerProcoreRoutes(app: Express): void {
     remove: id => store.deleteCommitmentLineItem(id),
   }, requireFinancialRole);
 
-  // ----- Owner invoices (pay applications) -----
+  // Owner invoices (pay applications)
   registerResource(app, "invoices", insertOwnerInvoiceSchema, {
     list: () => store.getOwnerInvoices(),
     get: id => store.getOwnerInvoice(id),
@@ -476,19 +490,19 @@ export function registerProcoreRoutes(app: Express): void {
     remove: id => store.deleteOwnerInvoice(id),
   }, requireFinancialRole);
 
-  app.get("/api/invoices/:id/g702", (req, res) => {
+  app.get("/api/invoices/:id/g702", async (req, res) => {
     const id = parseId(req, res);
     if (id === undefined) return;
-    const summary = store.getG702Summary(id);
+    const summary = await store.getG702Summary(id);
     if (!summary) return res.status(404).json({ message: "Not found" });
     return res.json(summary);
   });
 
   registerResource(app, "invoice-lines", insertInvoiceLineItemSchema, {
-    list: () => [],
+    list: async () => [],
     create: data => store.createInvoiceLineItem(data),
     update: (id, data) => store.updateInvoiceLineItem(id, data),
-    remove: () => false,
+    remove: async () => false,
   }, requireFinancialRole);
 
   // Overdue reminders: scan at boot and every 10 minutes
