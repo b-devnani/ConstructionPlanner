@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from "react";
+import { Link, useLocation } from "wouter";
 import { useCrud } from "@/hooks/use-crud";
 import {
   Rfi, InsertRfi, RFI_STATUSES, RFI_PRIORITIES, IMPACT_OPTIONS,
 } from "@shared/procore";
 import {
-  PageHeader, StatusBadge, SearchInput, StatusFilter, EmptyState, DetailRow,
+  PageHeader, StatusBadge, SearchInput, StatusFilter, EmptyState,
   TextField, SelectField, DateField, NumberField, TextAreaField,
 } from "@/components/procore/shared";
-import { AttachmentsSection } from "@/components/procore/AttachmentsSection";
 import { UserSelect } from "@/components/procore/UserSelect";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -16,8 +16,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Pencil, Trash2, Eye } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { formatDate, formatCurrency, todayString } from "@/lib/format";
 
 const emptyForm: InsertRfi = {
@@ -29,14 +28,12 @@ const emptyForm: InsertRfi = {
 };
 
 export default function RfisPage() {
-  const { query, create, update, remove } = useCrud<Rfi, InsertRfi>("rfis");
+  const [, navigate] = useLocation();
+  const { query, create, remove } = useCrud<Rfi, InsertRfi>("rfis");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<Rfi | null>(null);
   const [form, setForm] = useState<InsertRfi>(emptyForm);
-  const [viewing, setViewing] = useState<Rfi | null>(null);
-  const [responseDraft, setResponseDraft] = useState("");
 
   const rfis = query.data ?? [];
   const filtered = useMemo(
@@ -49,35 +46,18 @@ export default function RfisPage() {
   );
 
   const openCreate = () => {
-    setEditing(null);
     setForm({ ...emptyForm, dateInitiated: todayString(), status: "Open" });
     setDialogOpen(true);
   };
-  const openEdit = (r: Rfi) => {
-    setEditing(r);
-    const { id, createdAt, ...rest } = r;
-    setForm(rest);
-    setDialogOpen(true);
-  };
-  const openView = (r: Rfi) => { setViewing(r); setResponseDraft(r.answer); };
 
   const set = <K extends keyof InsertRfi>(key: K) => (value: InsertRfi[K]) =>
     setForm(f => ({ ...f, [key]: value }));
 
   const save = async () => {
     if (!form.subject.trim()) return;
-    if (editing) await update.mutateAsync({ id: editing.id, data: form });
-    else await create.mutateAsync(form);
+    const created = await create.mutateAsync(form);
     setDialogOpen(false);
-  };
-
-  const submitResponse = async (close: boolean) => {
-    if (!viewing) return;
-    const updated = await update.mutateAsync({
-      id: viewing.id,
-      data: { answer: responseDraft, ...(close ? { status: "Closed" as const, ballInCourt: "" } : {}) },
-    });
-    setViewing(updated);
+    navigate(`/rfis/${created.id}`);
   };
 
   return (
@@ -89,7 +69,7 @@ export default function RfisPage() {
         createLabel="Create RFI"
       />
 
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search RFIs..." />
         <StatusFilter value={statusFilter} onChange={setStatusFilter} options={RFI_STATUSES} />
       </div>
@@ -97,47 +77,43 @@ export default function RfisPage() {
       {filtered.length === 0 ? (
         <EmptyState message="No RFIs match the current filters." />
       ) : (
-        <div className="border rounded-md">
-          <Table>
+        <div className="border rounded">
+          <Table className="dense">
             <TableHeader>
               <TableRow>
-                <TableHead>#</TableHead>
+                <TableHead className="w-16">#</TableHead>
                 <TableHead>Subject</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Priority</TableHead>
+                <TableHead className="w-24">Status</TableHead>
+                <TableHead className="w-24">Priority</TableHead>
                 <TableHead>Assigned To</TableHead>
                 <TableHead>Ball in Court</TableHead>
-                <TableHead>Due Date</TableHead>
-                <TableHead>Cost Impact</TableHead>
-                <TableHead className="w-28"></TableHead>
+                <TableHead className="w-28">Due Date</TableHead>
+                <TableHead className="text-right w-28">Cost Impact</TableHead>
+                <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map(r => (
-                <TableRow key={r.id} className="cursor-pointer" onClick={() => openView(r)}>
-                  <TableCell className="font-medium">{r.number}</TableCell>
-                  <TableCell className="max-w-80 truncate">{r.subject}</TableCell>
+                <TableRow
+                  key={r.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => navigate(`/rfis/${r.id}`)}
+                >
+                  <TableCell className="font-medium text-primary">{r.number}</TableCell>
+                  <TableCell className="max-w-[28rem] truncate">{r.subject}</TableCell>
                   <TableCell><StatusBadge status={r.status} /></TableCell>
                   <TableCell><StatusBadge status={r.priority} /></TableCell>
-                  <TableCell>{r.assignedTo || "—"}</TableCell>
-                  <TableCell>{r.ballInCourt || "—"}</TableCell>
-                  <TableCell>{formatDate(r.dueDate)}</TableCell>
-                  <TableCell>
+                  <TableCell className="text-xs">{r.assignedTo || "—"}</TableCell>
+                  <TableCell className="text-xs">{r.ballInCourt || "—"}</TableCell>
+                  <TableCell className="text-xs">{formatDate(r.dueDate)}</TableCell>
+                  <TableCell className="text-right text-xs">
                     {r.costImpact === "Yes" ? formatCurrency(r.costImpactAmount) : r.costImpact}
                   </TableCell>
                   <TableCell onClick={e => e.stopPropagation()}>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openView(r)}>
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(r)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"
-                        onClick={() => remove.mutate(r.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"
+                      onClick={() => remove.mutate(r.id)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -146,81 +122,10 @@ export default function RfisPage() {
         </div>
       )}
 
-      {/* Detail / respond dialog */}
-      <Dialog open={viewing !== null} onOpenChange={open => !open && setViewing(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          {viewing && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-3">
-                  {viewing.number}: {viewing.subject}
-                  <StatusBadge status={viewing.status} />
-                </DialogTitle>
-              </DialogHeader>
-              <div>
-                <DetailRow label="Priority"><StatusBadge status={viewing.priority} /></DetailRow>
-                <DetailRow label="Assigned To">{viewing.assignedTo || "—"}</DetailRow>
-                <DetailRow label="RFI Manager">{viewing.rfiManager || "—"}</DetailRow>
-                <DetailRow label="Received From">{viewing.receivedFrom || "—"}</DetailRow>
-                <DetailRow label="Ball in Court">{viewing.ballInCourt || "—"}</DetailRow>
-                <DetailRow label="Spec / Drawing">{viewing.specSection || "—"} / {viewing.drawingNumber || "—"}</DetailRow>
-                <DetailRow label="Location">{viewing.location || "—"}</DetailRow>
-                <DetailRow label="Dates">
-                  Initiated {formatDate(viewing.dateInitiated)} · Due {formatDate(viewing.dueDate)}
-                  {viewing.dateClosed && <> · Closed {formatDate(viewing.dateClosed)}</>}
-                </DetailRow>
-                <DetailRow label="Cost Impact">
-                  {viewing.costImpact === "Yes" ? formatCurrency(viewing.costImpactAmount) : viewing.costImpact}
-                </DetailRow>
-                <DetailRow label="Schedule Impact">
-                  {viewing.scheduleImpact === "Yes" ? `${viewing.scheduleImpactDays} days` : viewing.scheduleImpact}
-                </DetailRow>
-              </div>
-              <div className="space-y-1.5">
-                <div className="text-sm font-semibold">Question</div>
-                <div className="text-sm whitespace-pre-wrap bg-muted rounded-md p-3">
-                  {viewing.question || "No question provided."}
-                </div>
-              </div>
-              <AttachmentsSection entityType="rfi" entityId={viewing.id} />
-              <div className="space-y-1.5">
-                <div className="text-sm font-semibold">Official Response</div>
-                {viewing.status === "Closed" ? (
-                  <div className="text-sm whitespace-pre-wrap bg-muted rounded-md p-3">
-                    {viewing.answer || "Closed without a response."}
-                  </div>
-                ) : (
-                  <Textarea
-                    rows={4}
-                    placeholder="Draft the official response..."
-                    value={responseDraft}
-                    onChange={e => setResponseDraft(e.target.value)}
-                  />
-                )}
-              </div>
-              <DialogFooter>
-                {viewing.status !== "Closed" && (
-                  <>
-                    <Button variant="outline" onClick={() => submitResponse(false)} disabled={update.isPending}>
-                      Save Response
-                    </Button>
-                    <Button onClick={() => submitResponse(true)} disabled={update.isPending}>
-                      Respond &amp; Close
-                    </Button>
-                  </>
-                )}
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Create / edit dialog */}
+      {/* Create dialog (detail view + edits live on /rfis/:id) */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? `Edit RFI ${editing.number}` : "Create RFI"}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Create RFI</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4">
             <TextField className="col-span-2" label="Subject" value={form.subject} onChange={set("subject")} />
             <TextAreaField className="col-span-2" label="Question" value={form.question ?? ""} onChange={set("question")} rows={4} />
@@ -243,8 +148,8 @@ export default function RfisPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={save} disabled={!form.subject.trim() || create.isPending || update.isPending}>
-              {editing ? "Save Changes" : "Create"}
+            <Button onClick={save} disabled={!form.subject.trim() || create.isPending}>
+              Create
             </Button>
           </DialogFooter>
         </DialogContent>

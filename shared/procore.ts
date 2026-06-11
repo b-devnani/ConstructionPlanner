@@ -667,3 +667,44 @@ export interface G702Summary {
   currentPaymentDue: number;
   balanceToFinishIncludingRetainage: number;
 }
+
+// ===========================================================================
+// Activity feed
+//
+// Append-only event log per record. The storage layer auto-emits events
+// (created, status changed, attachment added, workflow advanced, etc.) and
+// users can post manual comments through the detail UI.
+// ===========================================================================
+
+export const ACTIVITY_EVENT_TYPES = [
+  "created",
+  "status_changed",
+  "field_changed",
+  "comment",
+  "attachment_added",
+  "attachment_removed",
+  "workflow_step_added",
+  "workflow_step_responded",
+  "ball_in_court_changed",
+] as const;
+
+export const activityEventSchema = z.object({
+  id: z.number(),
+  entityType: z.string(),
+  entityId: z.number(),
+  eventType: z.enum(ACTIVITY_EVENT_TYPES),
+  summary: z.string(),
+  body: z.string().default(""),
+  actor: z.string().default(""),
+  createdAt: z.string(),
+});
+
+export const insertActivityEventSchema = activityEventSchema.omit({ id: true, createdAt: true });
+export const postCommentSchema = z.object({
+  entityType: z.string().min(1),
+  entityId: z.number(),
+  body: z.string().min(1),
+});
+
+export type ActivityEvent = z.infer<typeof activityEventSchema>;
+export type InsertActivityEvent = z.infer<typeof insertActivityEventSchema>;

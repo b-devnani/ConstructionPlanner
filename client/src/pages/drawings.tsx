@@ -101,8 +101,8 @@ export default function DrawingsPage() {
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
               {discipline} ({items.length})
             </h2>
-            <div className="border rounded-md">
-              <Table>
+            <div className="border rounded">
+              <Table className="dense">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-28">Number</TableHead>

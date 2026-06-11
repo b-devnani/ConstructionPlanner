@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { useCrud } from "@/hooks/use-crud";
 import {
   PunchItem, InsertPunchItem, PUNCH_STATUSES, PUNCH_PRIORITIES,
@@ -7,7 +8,6 @@ import {
   PageHeader, StatusBadge, SearchInput, StatusFilter, EmptyState,
   TextField, SelectField, DateField, TextAreaField,
 } from "@/components/procore/shared";
-import { AttachmentsSection } from "@/components/procore/AttachmentsSection";
 import { UserSelect } from "@/components/procore/UserSelect";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -16,7 +16,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, CheckCircle2 } from "lucide-react";
+import { Trash2, CheckCircle2 } from "lucide-react";
 import { formatDate } from "@/lib/format";
 
 const emptyForm: InsertPunchItem = {
@@ -26,11 +26,11 @@ const emptyForm: InsertPunchItem = {
 };
 
 export default function PunchListPage() {
+  const [, navigate] = useLocation();
   const { query, create, update, remove } = useCrud<PunchItem, InsertPunchItem>("punch-items");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<PunchItem | null>(null);
   const [form, setForm] = useState<InsertPunchItem>(emptyForm);
 
   const items = query.data ?? [];
@@ -46,22 +46,15 @@ export default function PunchListPage() {
   const openCount = items.filter(p => p.status === "Open").length;
   const reviewCount = items.filter(p => p.status === "Ready for Review").length;
 
-  const openCreate = () => { setEditing(null); setForm(emptyForm); setDialogOpen(true); };
-  const openEdit = (p: PunchItem) => {
-    setEditing(p);
-    const { id, createdAt, ...rest } = p;
-    setForm(rest);
-    setDialogOpen(true);
-  };
-
+  const openCreate = () => { setForm(emptyForm); setDialogOpen(true); };
   const set = <K extends keyof InsertPunchItem>(key: K) => (value: InsertPunchItem[K]) =>
     setForm(f => ({ ...f, [key]: value }));
 
   const save = async () => {
     if (!form.title.trim()) return;
-    if (editing) await update.mutateAsync({ id: editing.id, data: form });
-    else await create.mutateAsync(form);
+    const created = await create.mutateAsync(form);
     setDialogOpen(false);
+    navigate(`/punch-list/${created.id}`);
   };
 
   return (
@@ -73,7 +66,7 @@ export default function PunchListPage() {
         createLabel="Add Punch Item"
       />
 
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search punch items..." />
         <StatusFilter value={statusFilter} onChange={setStatusFilter} options={PUNCH_STATUSES} />
       </div>
@@ -81,49 +74,50 @@ export default function PunchListPage() {
       {filtered.length === 0 ? (
         <EmptyState message="No punch items match the current filters." />
       ) : (
-        <div className="border rounded-md">
-          <Table>
+        <div className="border rounded">
+          <Table className="dense">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-14">#</TableHead>
+                <TableHead className="w-12">#</TableHead>
                 <TableHead>Title</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Priority</TableHead>
+                <TableHead className="w-32">Status</TableHead>
+                <TableHead className="w-24">Priority</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Trade</TableHead>
                 <TableHead>Assignee</TableHead>
-                <TableHead>Due</TableHead>
-                <TableHead>Closed</TableHead>
-                <TableHead className="w-28"></TableHead>
+                <TableHead className="w-24">Due</TableHead>
+                <TableHead className="w-24">Closed</TableHead>
+                <TableHead className="w-20"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map(p => (
-                <TableRow key={p.id} className="cursor-pointer" onClick={() => openEdit(p)}>
-                  <TableCell className="font-medium">{p.number}</TableCell>
-                  <TableCell className="max-w-72 truncate">{p.title}</TableCell>
+                <TableRow
+                  key={p.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => navigate(`/punch-list/${p.id}`)}
+                >
+                  <TableCell className="font-medium text-primary">{p.number}</TableCell>
+                  <TableCell className="max-w-[24rem] truncate">{p.title}</TableCell>
                   <TableCell><StatusBadge status={p.status} /></TableCell>
                   <TableCell><StatusBadge status={p.priority} /></TableCell>
-                  <TableCell>{p.location || "—"}</TableCell>
-                  <TableCell>{p.trade || "—"}</TableCell>
-                  <TableCell>{p.assignee || "—"}</TableCell>
-                  <TableCell>{formatDate(p.dueDate)}</TableCell>
-                  <TableCell>{formatDate(p.dateClosed)}</TableCell>
+                  <TableCell className="text-xs">{p.location || "—"}</TableCell>
+                  <TableCell className="text-xs">{p.trade || "—"}</TableCell>
+                  <TableCell className="text-xs">{p.assignee || "—"}</TableCell>
+                  <TableCell className="text-xs">{formatDate(p.dueDate)}</TableCell>
+                  <TableCell className="text-xs">{formatDate(p.dateClosed)}</TableCell>
                   <TableCell onClick={e => e.stopPropagation()}>
                     <div className="flex gap-1">
                       {p.status !== "Closed" && (
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-green-600"
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600"
                           title="Close item"
                           onClick={() => update.mutate({ id: p.id, data: { status: "Closed" } })}>
-                          <CheckCircle2 className="h-4 w-4" />
+                          <CheckCircle2 className="h-3.5 w-3.5" />
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"
                         onClick={() => remove.mutate(p.id)}>
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </TableCell>
@@ -136,9 +130,7 @@ export default function PunchListPage() {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? `Edit Punch Item #${editing.number}` : "Add Punch Item"}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Add Punch Item</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 gap-4">
             <TextField className="col-span-2" label="Title" value={form.title} onChange={set("title")} />
             <TextAreaField className="col-span-2" label="Description" value={form.description ?? ""} onChange={set("description")} />
@@ -150,13 +142,10 @@ export default function PunchListPage() {
             <UserSelect label="Ball in Court" value={form.ballInCourt ?? ""} onChange={set("ballInCourt")} />
             <DateField label="Due Date" value={form.dueDate ?? null} onChange={set("dueDate")} />
           </div>
-          {editing && (
-            <AttachmentsSection entityType="punchItem" entityId={editing.id} title="Photos & Files" />
-          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={save} disabled={!form.title.trim() || create.isPending || update.isPending}>
-              {editing ? "Save Changes" : "Add Item"}
+            <Button onClick={save} disabled={!form.title.trim() || create.isPending}>
+              Add Item
             </Button>
           </DialogFooter>
         </DialogContent>

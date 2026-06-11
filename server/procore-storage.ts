@@ -6,7 +6,7 @@ import {
   manpowerEntries_t, punchItems_t, changeEvents_t, changeEventLineItems_t,
   changeOrders_t, changeOrderLineItems_t, budgetLineItems_t,
   commitments_t, commitmentLineItems_t, ownerInvoices_t, invoiceLineItems_t,
-  attachments_t, notifications_t,
+  attachments_t, notifications_t, activityEvents_t,
 } from "@shared/schema";
 import {
   type Submittal, type InsertSubmittal,
@@ -34,6 +34,7 @@ import {
   type OwnerInvoice, type InsertOwnerInvoice,
   type InvoiceLineItem, type InsertInvoiceLineItem,
   type G702Summary, type G703Row,
+  type ActivityEvent, type InsertActivityEvent,
 } from "@shared/procore";
 
 const today = () => new Date().toISOString().split("T")[0];
@@ -289,6 +290,19 @@ function mapNotification(row: typeof notifications_t.$inferSelect): Notification
   };
 }
 
+function mapActivityEvent(row: typeof activityEvents_t.$inferSelect): ActivityEvent {
+  return {
+    id: row.id,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    eventType: row.event_type as ActivityEvent["eventType"],
+    summary: row.summary,
+    body: row.body,
+    actor: row.actor,
+    createdAt: iso(row.created_at),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Storage: a thin async DAL backed by Postgres. Multi-instance safe by virtue
 // of the database being the single source of truth.
@@ -447,6 +461,10 @@ export class ProcoreStorage {
       required_on_site_date: data.requiredOnSiteDate ?? null,
       description: data.description ?? "",
     }).returning();
+    await this.createActivityEvent({
+      entityType: "submittal", entityId: row.id, eventType: "created",
+      summary: `Submittal ${number} created`, body: data.title, actor: "",
+    });
     return mapSubmittal(row);
   }
 
@@ -469,7 +487,23 @@ export class ProcoreStorage {
     if (data.requiredOnSiteDate !== undefined) updates.required_on_site_date = data.requiredOnSiteDate;
     if (data.description !== undefined) updates.description = data.description;
     if (Object.keys(updates).length === 0) return this.getSubmittal(id);
+    const before = await this.getSubmittal(id);
     const [row] = await db.update(submittals_t).set(updates).where(eq(submittals_t.id, id)).returning();
+    if (row && before) {
+      const after = mapSubmittal(row);
+      if (data.status !== undefined && before.status !== after.status) {
+        await this.createActivityEvent({
+          entityType: "submittal", entityId: id, eventType: "status_changed",
+          summary: `Status changed from ${before.status} to ${after.status}`, body: "", actor: "",
+        });
+      }
+      if (data.ballInCourt !== undefined && before.ballInCourt !== after.ballInCourt) {
+        await this.createActivityEvent({
+          entityType: "submittal", entityId: id, eventType: "ball_in_court_changed",
+          summary: `Ball in court → ${after.ballInCourt || "(unassigned)"}`, body: "", actor: "",
+        });
+      }
+    }
     return row ? mapSubmittal(row) : undefined;
   }
 
@@ -502,6 +536,12 @@ export class ProcoreStorage {
       responded_at: data.respondedAt ? new Date(data.respondedAt) : null,
     }).returning();
     const step = mapSubmittalStep(row);
+    await this.createActivityEvent({
+      entityType: "submittal", entityId: data.submittalId,
+      eventType: "workflow_step_added",
+      summary: `Approval step ${step.stepNumber} added: ${step.approverName}`,
+      body: step.dueDate ? `Due ${step.dueDate}` : "", actor: "",
+    });
 
     // Putting the first pending step in play moves the submittal into review
     const submittal = await this.getSubmittal(data.submittalId);
@@ -573,6 +613,12 @@ export class ProcoreStorage {
           date_returned: today(),
         });
       }
+      await tx.insert(activityEvents_t).values({
+        entity_type: "submittal", entity_id: step.submittalId,
+        event_type: "workflow_step_responded",
+        summary: `${step.approverName} responded: ${status}`,
+        body: comments, actor: step.approverName,
+      });
       return { step, submittal };
     });
   }
@@ -610,6 +656,10 @@ export class ProcoreStorage {
       due_date: data.dueDate ?? null,
       date_closed: data.dateClosed ?? null,
     }).returning();
+    await this.createActivityEvent({
+      entityType: "rfi", entityId: row.id, eventType: "created",
+      summary: `RFI ${number} created`, body: data.subject, actor: "",
+    });
     return mapRfi(row);
   }
 
@@ -644,6 +694,27 @@ export class ProcoreStorage {
     }
     if (Object.keys(updates).length === 0) return existing;
     const [row] = await db.update(rfis_t).set(updates).where(eq(rfis_t.id, id)).returning();
+    if (row) {
+      const after = mapRfi(row);
+      if (data.status !== undefined && existing.status !== after.status) {
+        await this.createActivityEvent({
+          entityType: "rfi", entityId: id, eventType: "status_changed",
+          summary: `Status changed from ${existing.status} to ${after.status}`, body: "", actor: "",
+        });
+      }
+      if (data.answer !== undefined && existing.answer !== after.answer && after.answer) {
+        await this.createActivityEvent({
+          entityType: "rfi", entityId: id, eventType: "comment",
+          summary: "Official response posted", body: after.answer, actor: "",
+        });
+      }
+      if (data.ballInCourt !== undefined && existing.ballInCourt !== after.ballInCourt) {
+        await this.createActivityEvent({
+          entityType: "rfi", entityId: id, eventType: "ball_in_court_changed",
+          summary: `Ball in court → ${after.ballInCourt || "(unassigned)"}`, body: "", actor: "",
+        });
+      }
+    }
     return row ? mapRfi(row) : undefined;
   }
 
@@ -897,6 +968,10 @@ export class ProcoreStorage {
       assignee: data.assignee ?? "", ball_in_court: data.ballInCourt ?? "",
       due_date: data.dueDate ?? null, date_closed: data.dateClosed ?? null,
     }).returning();
+    await this.createActivityEvent({
+      entityType: "punchItem", entityId: row.id, eventType: "created",
+      summary: `Punch item #${number} created`, body: data.title, actor: "",
+    });
     return mapPunchItem(row);
   }
 
@@ -920,6 +995,15 @@ export class ProcoreStorage {
     }
     if (Object.keys(updates).length === 0) return existing;
     const [row] = await db.update(punchItems_t).set(updates).where(eq(punchItems_t.id, id)).returning();
+    if (row) {
+      const after = mapPunchItem(row);
+      if (data.status !== undefined && existing.status !== after.status) {
+        await this.createActivityEvent({
+          entityType: "punchItem", entityId: id, eventType: "status_changed",
+          summary: `Status changed from ${existing.status} to ${after.status}`, body: "", actor: "",
+        });
+      }
+    }
     return row ? mapPunchItem(row) : undefined;
   }
 
@@ -948,6 +1032,10 @@ export class ProcoreStorage {
       event_type: data.eventType ?? "Owner Change",
       origin: data.origin ?? "", description: data.description ?? "",
     }).returning();
+    await this.createActivityEvent({
+      entityType: "changeEvent", entityId: row.id, eventType: "created",
+      summary: `Change event ${number} created`, body: data.title, actor: "",
+    });
     return mapChangeEvent(row);
   }
 
@@ -1033,6 +1121,10 @@ export class ProcoreStorage {
       signed_date: data.signedDate ?? null,
       date_created: data.dateCreated ?? today(),
     }).returning();
+    await this.createActivityEvent({
+      entityType: "changeOrder", entityId: row.id, eventType: "created",
+      summary: `Change order ${number} created`, body: data.title, actor: "",
+    });
     return mapChangeOrder(row);
   }
 
@@ -1048,7 +1140,17 @@ export class ProcoreStorage {
     if (data.signedDate !== undefined) updates.signed_date = data.signedDate;
     if (data.dateCreated !== undefined) updates.date_created = data.dateCreated;
     if (Object.keys(updates).length === 0) return this.getChangeOrder(id);
+    const before = await this.getChangeOrder(id);
     const [row] = await db.update(changeOrders_t).set(updates).where(eq(changeOrders_t.id, id)).returning();
+    if (row && before) {
+      const after = mapChangeOrder(row);
+      if (data.status !== undefined && before.status !== after.status) {
+        await this.createActivityEvent({
+          entityType: "changeOrder", entityId: id, eventType: "status_changed",
+          summary: `Status changed from ${before.status} to ${after.status}`, body: "", actor: "",
+        });
+      }
+    }
     return row ? mapChangeOrder(row) : undefined;
   }
 
@@ -1267,6 +1369,10 @@ export class ProcoreStorage {
       retainage_percent: data.retainagePercent ?? 10,
       description: data.description ?? "",
     }).returning();
+    await this.createActivityEvent({
+      entityType: "commitment", entityId: row.id, eventType: "created",
+      summary: `${commitmentType} ${number} created`, body: data.title, actor: "",
+    });
     return mapCommitment(row);
   }
 
@@ -1287,6 +1393,15 @@ export class ProcoreStorage {
     }
     if (Object.keys(updates).length === 0) return existing;
     const [row] = await db.update(commitments_t).set(updates).where(eq(commitments_t.id, id)).returning();
+    if (row) {
+      const after = mapCommitment(row);
+      if (data.status !== undefined && existing.status !== after.status) {
+        await this.createActivityEvent({
+          entityType: "commitment", entityId: id, eventType: "status_changed",
+          summary: `Status changed from ${existing.status} to ${after.status}`, body: "", actor: "",
+        });
+      }
+    }
     return row ? mapCommitment(row) : undefined;
   }
 
@@ -1494,11 +1609,24 @@ export class ProcoreStorage {
       filename: data.filename, mime_type: data.mimeType, size: data.size,
       storage_path: data.storagePath, uploaded_by: data.uploadedBy,
     }).returning();
+    await this.createActivityEvent({
+      entityType: data.entityType, entityId: data.entityId,
+      eventType: "attachment_added",
+      summary: `Attached ${data.filename}`, body: "", actor: data.uploadedBy,
+    });
     return mapAttachment(row);
   }
 
   async deleteAttachment(id: number): Promise<boolean> {
+    const attachment = await this.getAttachment(id);
     const result = await db.delete(attachments_t).where(eq(attachments_t.id, id)).returning({ id: attachments_t.id });
+    if (attachment && result.length > 0) {
+      await this.createActivityEvent({
+        entityType: attachment.entityType, entityId: attachment.entityId,
+        eventType: "attachment_removed",
+        summary: `Removed ${attachment.filename}`, body: "", actor: "",
+      });
+    }
     return result.length > 0;
   }
 
@@ -1552,6 +1680,24 @@ export class ProcoreStorage {
   async markAllNotificationsRead(userId: number): Promise<void> {
     await db.update(notifications_t).set({ read: true })
       .where(and(eq(notifications_t.user_id, userId), eq(notifications_t.read, false)));
+  }
+
+  // ----- Activity feed -----
+
+  async getActivityEvents(entityType: string, entityId: number): Promise<ActivityEvent[]> {
+    const rows = await db.select().from(activityEvents_t)
+      .where(and(eq(activityEvents_t.entity_type, entityType), eq(activityEvents_t.entity_id, entityId)))
+      .orderBy(sql`${activityEvents_t.created_at} DESC`);
+    return rows.map(mapActivityEvent);
+  }
+
+  async createActivityEvent(data: InsertActivityEvent): Promise<ActivityEvent> {
+    const [row] = await db.insert(activityEvents_t).values({
+      entity_type: data.entityType, entity_id: data.entityId,
+      event_type: data.eventType, summary: data.summary,
+      body: data.body ?? "", actor: data.actor ?? "",
+    }).returning();
+    return mapActivityEvent(row);
   }
 
   // ----- Overdue scan -----

@@ -383,3 +383,14 @@ export const sessions_t = pgTable("session", {
   sess: jsonb("sess").notNull(),
   expire: timestamp("expire", { precision: 6 }).notNull(),
 });
+
+export const activityEvents_t = pgTable("activity_events", {
+  id: serial("id").primaryKey(),
+  entity_type: text("entity_type").notNull(),
+  entity_id: integer("entity_id").notNull(),
+  event_type: text("event_type").notNull(),
+  summary: text("summary").notNull(),
+  body: text("body").notNull().default(""),
+  actor: text("actor").notNull().default(""),
+  created_at: timestamp("created_at").notNull().defaultNow(),
+});

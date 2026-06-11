@@ -15,6 +15,7 @@ import {
   insertCommitmentLineItemSchema,
   insertOwnerInvoiceSchema,
   insertInvoiceLineItemSchema,
+  postCommentSchema,
 } from "@shared/procore";
 import {
   insertSubmittalSchema,
@@ -504,6 +505,32 @@ export function registerProcoreRoutes(app: Express): void {
     update: (id, data) => store.updateInvoiceLineItem(id, data),
     remove: async () => false,
   }, requireFinancialRole);
+
+  // Activity feed (per-record event log + manual comments)
+  app.get("/api/activity", async (req, res) => {
+    const entityType = String(req.query.entityType ?? "");
+    const entityId = parseInt(String(req.query.entityId ?? ""));
+    if (!entityType || isNaN(entityId)) {
+      return res.status(400).json({ message: "entityType and entityId are required" });
+    }
+    return res.json(await store.getActivityEvents(entityType, entityId));
+  });
+
+  app.post("/api/activity/comment", async (req, res) => {
+    try {
+      const data = postCommentSchema.parse(req.body);
+      const user = await currentUser(req);
+      const event = await store.createActivityEvent({
+        entityType: data.entityType, entityId: data.entityId,
+        eventType: "comment",
+        summary: `${user?.name ?? "Someone"} added a comment`,
+        body: data.body, actor: user?.name ?? "",
+      });
+      return res.status(201).json(event);
+    } catch (error) {
+      return handleError(res, error, "post comment");
+    }
+  });
 
   // Overdue reminders: scan at boot and every 10 minutes
   startOverdueScanner();

@@ -312,6 +312,17 @@ export async function ensureSchema(): Promise<void> {
       sess JSONB NOT NULL,
       expire TIMESTAMP(6) NOT NULL
     )`,
+    `CREATE TABLE IF NOT EXISTS activity_events (
+      id SERIAL PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      event_type TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      actor TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS activity_events_entity_idx ON activity_events (entity_type, entity_id, created_at DESC)`,
     `CREATE INDEX IF NOT EXISTS session_expire_idx ON session (expire)`,
     `CREATE INDEX IF NOT EXISTS attachments_entity_idx ON attachments (entity_type, entity_id)`,
     `CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id)`,

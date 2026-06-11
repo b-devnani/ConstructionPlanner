@@ -5,6 +5,19 @@ export default {
   content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: [
+          "Inter", "ui-sans-serif", "system-ui", "-apple-system",
+          "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif",
+        ],
+      },
+      fontSize: {
+        // Denser type scale; tables and forms use these
+        "2xs": ["0.6875rem", { lineHeight: "1rem" }],   // 11px
+        "xs": ["0.75rem", { lineHeight: "1.1rem" }],    // 12px
+        "sm": ["0.8125rem", { lineHeight: "1.2rem" }],  // 13px
+        "base": ["0.875rem", { lineHeight: "1.35rem" }], // 14px
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
