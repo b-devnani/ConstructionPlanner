@@ -172,7 +172,7 @@ export default function DailyLogPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
+              <Table className="dense">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Contractor</TableHead>

@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/procore/shared";
 import { ActivityFeed } from "@/components/procore/ActivityFeed";
 import { AttachmentsSection } from "@/components/procore/AttachmentsSection";
-import { ArrowLeft, ChevronDown } from "lucide-react";
+import { useBreadcrumbLabel } from "@/lib/BreadcrumbContext";
+import { ArrowLeft } from "lucide-react";
 
 export interface RecordTab {
   id: string;
@@ -50,6 +51,9 @@ export function RecordPage({
   showAttachmentsTab?: boolean;
   attachmentsLabel?: string;
 }) {
+  // Surface the record number in the layout breadcrumb (e.g. "RFIs › RFI-002")
+  useBreadcrumbLabel(number);
+
   const allTabs: RecordTab[] = [
     ...tabs,
     ...(showAttachmentsTab

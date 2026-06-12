@@ -92,7 +92,7 @@ export default function DirectoryPage() {
         <EmptyState message="No people match the current search." />
       ) : (
         <div className="border rounded-md">
-          <Table>
+          <Table className="dense">
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>

@@ -20,7 +20,7 @@ export default function PunchDetailPage() {
   const id = parseInt(params?.id ?? "0");
 
   const query = useQuery<PunchItem>({ queryKey: [`/api/punch-items/${id}`] });
-  const { update, remove } = useCrud<PunchItem, InsertPunchItem>("punch-items");
+  const { update, remove } = useCrud<PunchItem, InsertPunchItem>("punch-items", [], "punchItem");
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<PunchItem | null>(null);

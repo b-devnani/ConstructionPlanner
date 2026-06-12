@@ -19,6 +19,7 @@ import {
   ArrowLeft, MapPin, Trash2, Plus, Minus, RotateCcw,
 } from "lucide-react";
 import { formatDate } from "@/lib/format";
+import { useBreadcrumbLabel } from "@/lib/BreadcrumbContext";
 
 const PIN_COLORS: Record<string, string> = {
   rfi: "bg-blue-600",
@@ -64,6 +65,7 @@ export default function DrawingViewerPage() {
   const sheetRef = useRef<HTMLDivElement>(null);
 
   const drawing = drawingQuery.data;
+  useBreadcrumbLabel(drawing?.number);
   const pins = pinsQuery.data ?? [];
   const attachments = attachmentsQuery.data ?? [];
   const rfis = rfisQuery.data ?? [];
@@ -279,7 +281,9 @@ export default function DrawingViewerPage() {
                 <button
                   key={pin.id}
                   title={linkedLabel(pin)}
-                  className={`absolute -translate-x-1/2 -translate-y-full z-10 ${PIN_COLORS[pin.linkType]} text-white rounded-full h-6 w-6 flex items-center justify-center shadow-md hover:scale-110 transition-transform`}
+                  // hover feedback uses brightness because the inline transform
+                  // (counter-scaling against zoom) would override a hover scale
+                  className={`absolute z-10 ${PIN_COLORS[pin.linkType]} text-white rounded-full h-6 w-6 flex items-center justify-center shadow-md hover:brightness-125 transition-[filter]`}
                   style={{ left: `${pin.x}%`, top: `${pin.y}%`, transform: `translate(-50%, -100%) scale(${1 / zoom})`, transformOrigin: "center bottom" }}
                   onClick={e => { e.stopPropagation(); setSelectedPin(pin); }}
                 >

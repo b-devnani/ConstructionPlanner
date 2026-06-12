@@ -33,7 +33,13 @@ export function AttachmentsSection({
   const query = useQuery<Attachment[]>({ queryKey: [listKey] });
   const attachments = query.data ?? [];
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: [listKey] });
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: [listKey] });
+    // uploads/removals emit activity events — keep the feed in sync
+    queryClient.invalidateQueries({
+      queryKey: [`/api/activity?entityType=${entityType}&entityId=${entityId}`],
+    });
+  };
 
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;

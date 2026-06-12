@@ -34,7 +34,7 @@ export default function ChangeOrderDetailPage() {
   const query = useQuery<ChangeOrder>({ queryKey: [`/api/change-orders/${id}`] });
   const events = useQuery<ChangeEvent[]>({ queryKey: ["/api/change-events"] });
   const { update, remove } = useCrud<ChangeOrder, InsertChangeOrder>(
-    "change-orders", ["/api/budget", "/api/prime-contract/financials"],
+    "change-orders", ["/api/budget", "/api/prime-contract/financials"], "changeOrder",
   );
   const lines = useCrud<ChangeOrderLineItem, InsertChangeOrderLineItem>(
     "change-order-lines",

@@ -86,7 +86,7 @@ export default function SpecificationsPage() {
               Division {division} ({items.length})
             </h2>
             <div className="border rounded-md">
-              <Table>
+              <Table className="dense">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-32">Section</TableHead>

@@ -700,8 +700,19 @@ export const activityEventSchema = z.object({
 });
 
 export const insertActivityEventSchema = activityEventSchema.omit({ id: true, createdAt: true });
+
+/** Record types that surface an activity feed and accept comments. */
+export const COMMENTABLE_ENTITY_TYPES = [
+  "rfi",
+  "submittal",
+  "punchItem",
+  "changeEvent",
+  "changeOrder",
+  "commitment",
+] as const;
+
 export const postCommentSchema = z.object({
-  entityType: z.string().min(1),
+  entityType: z.enum(COMMENTABLE_ENTITY_TYPES),
   entityId: z.number(),
   body: z.string().min(1),
 });

@@ -30,7 +30,7 @@ export default function CommitmentDetailPage() {
   const id = parseInt(params?.id ?? "0");
 
   const query = useQuery<Commitment>({ queryKey: [`/api/commitments/${id}`] });
-  const { update, remove } = useCrud<Commitment, InsertCommitment>("commitments", ["/api/budget"]);
+  const { update, remove } = useCrud<Commitment, InsertCommitment>("commitments", ["/api/budget"], "commitment");
   const lines = useCrud<CommitmentLineItem, InsertCommitmentLineItem>(
     "commitment-lines", ["/api/commitment-line-items", "/api/budget"],
   );

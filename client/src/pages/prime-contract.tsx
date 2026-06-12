@@ -131,7 +131,7 @@ export default function PrimeContractPage() {
 
         <TabsContent value="sov" className="mt-4">
           <div className="border rounded-md">
-            <Table>
+            <Table className="dense">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-16">Item</TableHead>

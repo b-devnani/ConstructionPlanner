@@ -6,6 +6,7 @@ import { NotificationBell } from "@/components/procore/NotificationBell";
 import { ToolsPicker } from "@/components/layout/ToolsPicker";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { useFavorites } from "@/lib/FavoritesContext";
+import { BreadcrumbProvider } from "@/lib/BreadcrumbContext";
 import { TOOLS, type Tool } from "@/lib/tools";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -43,6 +44,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
     .filter((t): t is Tool => Boolean(t));
 
   return (
+    <BreadcrumbProvider>
     <div className="min-h-screen flex flex-col bg-background">
       {/* Top bar — slate, dense, with tool picker */}
       <header
@@ -120,5 +122,6 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
         </main>
       </div>
     </div>
+    </BreadcrumbProvider>
   );
 }

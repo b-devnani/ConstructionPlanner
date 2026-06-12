@@ -84,7 +84,7 @@ export default function InvoicingPage() {
         <EmptyState message="No payment applications yet. Create one to bill against the schedule of values." />
       ) : (
         <div className="border rounded-md mb-6">
-          <Table>
+          <Table className="dense">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-24">#</TableHead>
@@ -161,7 +161,7 @@ export default function InvoicingPage() {
           </div>
 
           <div className="border rounded-md overflow-x-auto">
-            <Table>
+            <Table className="dense">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-14">Item</TableHead>

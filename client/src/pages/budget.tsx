@@ -95,7 +95,7 @@ export default function BudgetPage() {
         <EmptyState message="No budget line items yet." />
       ) : (
         <div className="border rounded-md overflow-x-auto">
-          <Table>
+          <Table className="dense">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-28">Cost Code</TableHead>

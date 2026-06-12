@@ -28,7 +28,7 @@ export default function ChangeEventDetailPage() {
   const id = parseInt(params?.id ?? "0");
 
   const query = useQuery<ChangeEvent>({ queryKey: [`/api/change-events/${id}`] });
-  const { update, remove } = useCrud<ChangeEvent, InsertChangeEvent>("change-events", ["/api/budget"]);
+  const { update, remove } = useCrud<ChangeEvent, InsertChangeEvent>("change-events", ["/api/budget"], "changeEvent");
   const lines = useCrud<ChangeEventLineItem, InsertChangeEventLineItem>(
     "change-event-lines", ["/api/change-event-line-items", "/api/budget"],
   );

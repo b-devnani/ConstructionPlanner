@@ -1,4 +1,5 @@
 import React from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Notification } from "@shared/procore";
@@ -6,11 +7,30 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Bell } from "lucide-react";
+import { Bell, ExternalLink } from "lucide-react";
 
 const KEY = "/api/notifications";
 
+/** Maps notification entity types to their detail routes. */
+const ENTITY_ROUTES: Record<string, (id: number) => string> = {
+  rfi: id => `/rfis/${id}`,
+  submittal: id => `/submittals/${id}`,
+  punchItem: id => `/punch-list/${id}`,
+  changeEvent: id => `/change-events/${id}`,
+  changeOrder: id => `/change-orders/${id}`,
+  commitment: id => `/commitments/${id}`,
+  drawing: id => `/drawings/${id}`,
+};
+
+function notificationRoute(n: Notification): string | null {
+  if (!n.entityType || n.entityId === null) return null;
+  const builder = ENTITY_ROUTES[n.entityType];
+  return builder ? builder(n.entityId) : null;
+}
+
 export function NotificationBell() {
+  const [, navigate] = useLocation();
+  const [open, setOpen] = React.useState(false);
   const query = useQuery<Notification[]>({
     queryKey: [KEY],
     refetchInterval: 60_000,
@@ -32,8 +52,17 @@ export function NotificationBell() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [KEY] }),
   });
 
+  const handleClick = (n: Notification) => {
+    if (!n.read) markRead.mutate(n.id);
+    const route = notificationRoute(n);
+    if (route) {
+      setOpen(false);
+      navigate(route);
+    }
+  };
+
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <button className="relative p-1.5 rounded hover:bg-white/15" aria-label="Notifications">
           <Bell className="h-5 w-5" />
@@ -60,21 +89,29 @@ export function NotificationBell() {
               No notifications yet.
             </p>
           ) : (
-            notifications.slice(0, 30).map(n => (
-              <button
-                key={n.id}
-                className={`w-full text-left px-3 py-2.5 border-b last:border-0 hover:bg-muted text-sm ${
-                  n.read ? "opacity-60" : "bg-primary/5"
-                }`}
-                onClick={() => !n.read && markRead.mutate(n.id)}
-              >
-                <div className="font-medium leading-snug">{n.title}</div>
-                {n.body && <div className="text-xs text-muted-foreground mt-0.5">{n.body}</div>}
-                <div className="text-[11px] text-muted-foreground mt-1">
-                  {new Date(n.createdAt).toLocaleString()}
-                </div>
-              </button>
-            ))
+            notifications.slice(0, 30).map(n => {
+              const hasRoute = notificationRoute(n) !== null;
+              return (
+                <button
+                  key={n.id}
+                  className={`w-full text-left px-3 py-2.5 border-b last:border-0 hover:bg-muted text-sm group ${
+                    n.read ? "opacity-60" : "bg-primary/5"
+                  }`}
+                  onClick={() => handleClick(n)}
+                >
+                  <div className="font-medium leading-snug flex items-start gap-1.5">
+                    <span className="flex-1">{n.title}</span>
+                    {hasRoute && (
+                      <ExternalLink className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                    )}
+                  </div>
+                  {n.body && <div className="text-xs text-muted-foreground mt-0.5">{n.body}</div>}
+                  <div className="text-[11px] text-muted-foreground mt-1">
+                    {new Date(n.createdAt).toLocaleString()}
+                  </div>
+                </button>
+              );
+            })
           )}
         </div>
       </DropdownMenuContent>

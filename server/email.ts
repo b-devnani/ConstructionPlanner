@@ -58,6 +58,9 @@ export function emailTransportMode(): "smtp" | "outbox" {
 
 function logToOutbox(to: string, subject: string, body: string): void {
   const entry = `${new Date().toISOString()} | TO: ${to} | SUBJECT: ${subject} | ${body}\n`;
+  // This is also the fallback when an SMTP send fails at runtime, in which
+  // case init never created the directory — ensure it exists every time.
+  fs.mkdirSync(path.dirname(OUTBOX_PATH), { recursive: true });
   fs.appendFileSync(OUTBOX_PATH, entry);
 }
 

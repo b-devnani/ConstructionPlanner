@@ -144,7 +144,7 @@ export default function SubmittalDetailPage() {
   const id = parseInt(params?.id ?? "0");
 
   const query = useQuery<Submittal>({ queryKey: [`/api/submittals/${id}`] });
-  const { update, remove } = useCrud<Submittal, InsertSubmittal>("submittals");
+  const { update, remove } = useCrud<Submittal, InsertSubmittal>("submittals", [], "submittal");
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Submittal | null>(null);

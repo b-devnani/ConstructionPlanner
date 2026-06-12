@@ -25,7 +25,7 @@ export default function RfiDetailPage() {
   const { canEditFinancials } = useAuth();
 
   const query = useQuery<Rfi>({ queryKey: [`/api/rfis/${id}`] });
-  const { update, remove } = useCrud<Rfi, InsertRfi>("rfis");
+  const { update, remove } = useCrud<Rfi, InsertRfi>("rfis", [], "rfi");
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Rfi | null>(null);

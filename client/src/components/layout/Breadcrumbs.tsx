@@ -2,6 +2,7 @@ import React from "react";
 import { Link, useLocation } from "wouter";
 import { ChevronRight, Home } from "lucide-react";
 import { toolByPath } from "@/lib/tools";
+import { useBreadcrumbTrailing } from "@/lib/BreadcrumbContext";
 
 interface Crumb {
   label: string;
@@ -10,12 +11,14 @@ interface Crumb {
 
 /**
  * Auto-generates breadcrumbs from the current route. Detail pages (e.g.
- * /rfis/3) prepend the tool name as a clickable parent crumb. Pages can
- * override the leaf label by passing it from their record header.
+ * /rfis/3) prepend the tool name as a clickable parent crumb; the leaf label
+ * comes from BreadcrumbContext (the record number, published by RecordPage)
+ * and falls back to the raw route segment until the record loads.
  */
-export function Breadcrumbs({ trailing }: { trailing?: string }) {
+export function Breadcrumbs() {
   const [path] = useLocation();
   const tool = toolByPath(path);
+  const trailing = useBreadcrumbTrailing() ?? undefined;
 
   const crumbs: Crumb[] = [{ label: "Project Home", path: "/" }];
   if (tool && tool.path !== "/") crumbs.push({ label: tool.label, path: tool.path });

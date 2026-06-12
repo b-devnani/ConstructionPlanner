@@ -4,17 +4,31 @@ import { useToast } from "@/hooks/use-toast";
 
 /**
  * Generic list + create/update/delete helpers for a REST resource under /api.
- * Invalidates the resource list (and any extra keys) after each mutation.
+ *
+ * Invalidation: every mutation invalidates the list key and any extra keys.
+ * Update/remove also invalidate the record's detail key (`/api/<resource>/<id>`)
+ * — TanStack's per-element prefix matching means the list key alone would NOT
+ * match it — and, when `activityEntityType` is provided, the record's activity
+ * feed key, so status changes show up in the feed without a reload.
  */
 export function useCrud<T extends { id: number }, I = Omit<T, "id">>(
   resource: string,
   extraInvalidations: string[] = [],
+  activityEntityType?: string,
 ) {
   const { toast } = useToast();
   const listKey = `/api/${resource}`;
 
-  const invalidate = () => {
+  const invalidate = (id?: number) => {
     queryClient.invalidateQueries({ queryKey: [listKey] });
+    if (id !== undefined) {
+      queryClient.invalidateQueries({ queryKey: [`${listKey}/${id}`] });
+      if (activityEntityType) {
+        queryClient.invalidateQueries({
+          queryKey: [`/api/activity?entityType=${activityEntityType}&entityId=${id}`],
+        });
+      }
+    }
     for (const key of extraInvalidations) {
       queryClient.invalidateQueries({ queryKey: [key] });
     }
@@ -31,7 +45,7 @@ export function useCrud<T extends { id: number }, I = Omit<T, "id">>(
       const res = await apiRequest("POST", listKey, data);
       return (await res.json()) as T;
     },
-    onSuccess: invalidate,
+    onSuccess: created => invalidate(created.id),
     onError,
   });
 
@@ -40,7 +54,7 @@ export function useCrud<T extends { id: number }, I = Omit<T, "id">>(
       const res = await apiRequest("PUT", `${listKey}/${id}`, data);
       return (await res.json()) as T;
     },
-    onSuccess: invalidate,
+    onSuccess: (_data, variables) => invalidate(variables.id),
     onError,
   });
 
@@ -48,7 +62,7 @@ export function useCrud<T extends { id: number }, I = Omit<T, "id">>(
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `${listKey}/${id}`);
     },
-    onSuccess: invalidate,
+    onSuccess: (_data, id) => invalidate(id),
     onError,
   });
 
