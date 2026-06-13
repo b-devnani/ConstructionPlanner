@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: appuser
+          POSTGRES_PASSWORD: apppass
+          POSTGRES_DB: constructionplanner
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U appuser"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://appuser:apppass@localhost:5432/constructionplanner
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Boot smoke test
+        run: |
+          NODE_ENV=production SESSION_SECRET=ci-test-secret-key-1234567890 \
+            node dist/index.js &
+          SERVER_PID=$!
+          # Wait for the health endpoint to report the DB is up
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5000/api/health | grep -q '"db":"up"'; then
+              echo "Server healthy"
+              kill $SERVER_PID
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server did not become healthy in time"
+          kill $SERVER_PID 2>/dev/null || true
+          exit 1

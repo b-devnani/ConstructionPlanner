@@ -2,14 +2,18 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { 
-  insertLocationSchema, 
-  insertContractorSchema, 
+import {
+  insertLocationSchema,
+  insertContractorSchema,
   insertActivitySchema,
   insertHolidaySchema
 } from "@shared/schema";
+import { registerProcoreRoutes } from "./procore-routes";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Procore-style project management tools (submittals, RFIs, budget, etc.)
+  registerProcoreRoutes(app);
+
   // API Routes for the Construction Schedule application
   // All routes are prefixed with /api
 

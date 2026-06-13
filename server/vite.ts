@@ -6,6 +6,7 @@ import { createServer as createViteServer, createLogger } from "vite";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import { type Server } from "http";
+import { type ServerOptions } from "vite";
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
 
@@ -23,7 +24,7 @@ export function log(message: string, source = "express") {
 }
 
 export async function setupVite(app: Express, server: Server) {
-  const serverOptions = {
+  const serverOptions: ServerOptions = {
     middlewareMode: true,
     hmr: { server },
     allowedHosts: true,
