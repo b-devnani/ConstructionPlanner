@@ -19,14 +19,84 @@ const loginSchema = z.object({
 });
 
 /**
+ * Resolves the session secret. In production a strong secret MUST be provided
+ * via SESSION_SECRET — a predictable fallback would let an attacker forge
+ * session cookies. In dev we allow a fixed value for convenience.
+ */
+function resolveSessionSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (secret && secret.length >= 16) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "SESSION_SECRET must be set to a strong value (>= 16 chars) in production",
+    );
+  }
+  console.warn("[auth] SESSION_SECRET not set; using insecure dev fallback");
+  return "construction-planner-dev-secret";
+}
+
+// ---------------------------------------------------------------------------
+// Login rate limiting
+//
+// Simple in-memory sliding-window limiter keyed by client IP + email. Blocks
+// brute force at the single-instance level; behind a load balancer each
+// instance keeps its own counters, so for hard multi-instance guarantees move
+// this to a shared store (Redis) or an edge/WAF rule. Successful logins clear
+// the counter for the key.
+// ---------------------------------------------------------------------------
+
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 10;
+const loginAttempts = new Map<string, { count: number; firstAt: number }>();
+
+function loginKey(req: Request, email: string): string {
+  const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()
+    || req.socket.remoteAddress
+    || "unknown";
+  return `${ip}|${email.toLowerCase()}`;
+}
+
+function isRateLimited(key: string): boolean {
+  const entry = loginAttempts.get(key);
+  if (!entry) return false;
+  if (Date.now() - entry.firstAt > LOGIN_WINDOW_MS) {
+    loginAttempts.delete(key);
+    return false;
+  }
+  return entry.count >= LOGIN_MAX_ATTEMPTS;
+}
+
+function recordFailure(key: string): void {
+  const now = Date.now();
+  const entry = loginAttempts.get(key);
+  if (!entry || now - entry.firstAt > LOGIN_WINDOW_MS) {
+    loginAttempts.set(key, { count: 1, firstAt: now });
+  } else {
+    entry.count += 1;
+  }
+}
+
+// Opportunistic cleanup so the map can't grow unbounded
+setInterval(() => {
+  const now = Date.now();
+  Array.from(loginAttempts.entries()).forEach(([key, entry]) => {
+    if (now - entry.firstAt > LOGIN_WINDOW_MS) loginAttempts.delete(key);
+  });
+}, LOGIN_WINDOW_MS).unref();
+
+/**
  * Sessions are stored in Postgres (connect-pg-simple) so they survive
  * restarts and are shared across instances.
  */
 export function setupAuth(app: Express): void {
+  // Required so x-forwarded-for is trusted behind a reverse proxy / LB and
+  // secure cookies work when TLS is terminated upstream.
+  app.set("trust proxy", 1);
+
   const PgStore = connectPgSimple(session);
   app.use(
     session({
-      secret: process.env.SESSION_SECRET ?? "construction-planner-dev-secret",
+      secret: resolveSessionSecret(),
       resave: false,
       saveUninitialized: false,
       store: new PgStore({
@@ -35,6 +105,7 @@ export function setupAuth(app: Express): void {
       cookie: {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
         maxAge: 7 * 24 * 60 * 60 * 1000,
       },
     }),
@@ -45,10 +116,18 @@ export function setupAuth(app: Express): void {
     if (!parsed.success) {
       return res.status(400).json({ message: "Email and password are required" });
     }
+    const key = loginKey(req, parsed.data.email);
+    if (isRateLimited(key)) {
+      return res.status(429).json({
+        message: "Too many login attempts. Please wait a few minutes and try again.",
+      });
+    }
     const user = await store.getUserWithPassword(parsed.data.email);
     if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
+      recordFailure(key);
       return res.status(401).json({ message: "Invalid email or password" });
     }
+    loginAttempts.delete(key);
     req.session.userId = user.id;
     const { passwordHash, ...safe } = user;
     return res.json(safe);

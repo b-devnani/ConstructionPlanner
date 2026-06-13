@@ -2,9 +2,9 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupAuth } from "./auth";
-import { ensureSchema, closeDb } from "./db";
+import { ensureSchema, closeDb, pool } from "./db";
 import { seedIfEmpty } from "./seed";
-import { initEmail } from "./email";
+import { initEmail, emailTransportMode } from "./email";
 
 const app = express();
 app.use(express.json());
@@ -48,6 +48,27 @@ app.use((req, res, next) => {
   await ensureSchema();
   await seedIfEmpty();
   await initEmail();
+
+  // Health/readiness probe — unauthenticated, registered before the /api auth
+  // middleware. Returns 200 only when the database is reachable so load
+  // balancers can pull an instance with a broken DB connection.
+  app.get("/api/health", async (_req, res) => {
+    try {
+      await pool.query("SELECT 1");
+      return res.json({
+        status: "ok",
+        db: "up",
+        email: emailTransportMode(),
+        uptime: Math.round(process.uptime()),
+      });
+    } catch (error) {
+      return res.status(503).json({
+        status: "degraded",
+        db: "down",
+        error: (error as Error).message,
+      });
+    }
+  });
 
   // Sessions + login must be registered before any /api routes
   setupAuth(app);

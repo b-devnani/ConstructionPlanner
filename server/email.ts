@@ -13,6 +13,9 @@ import nodemailer, { type Transporter } from "nodemailer";
  */
 
 const OUTBOX_PATH = path.resolve(process.cwd(), "data", "email-outbox.log");
+// Rotate the outbox once it crosses this size so it can't grow without bound
+// when SMTP is unconfigured. One previous generation is kept as .1.
+const OUTBOX_MAX_BYTES = 5 * 1024 * 1024;
 
 let transporter: Transporter | null = null;
 let transportMode: "smtp" | "outbox" = "outbox";
@@ -56,11 +59,23 @@ export function emailTransportMode(): "smtp" | "outbox" {
   return transportMode;
 }
 
+function rotateOutboxIfNeeded(): void {
+  try {
+    const stat = fs.statSync(OUTBOX_PATH);
+    if (stat.size >= OUTBOX_MAX_BYTES) {
+      fs.renameSync(OUTBOX_PATH, `${OUTBOX_PATH}.1`);
+    }
+  } catch {
+    // file doesn't exist yet — nothing to rotate
+  }
+}
+
 function logToOutbox(to: string, subject: string, body: string): void {
   const entry = `${new Date().toISOString()} | TO: ${to} | SUBJECT: ${subject} | ${body}\n`;
   // This is also the fallback when an SMTP send fails at runtime, in which
   // case init never created the directory — ensure it exists every time.
   fs.mkdirSync(path.dirname(OUTBOX_PATH), { recursive: true });
+  rotateOutboxIfNeeded();
   fs.appendFileSync(OUTBOX_PATH, entry);
 }
 
